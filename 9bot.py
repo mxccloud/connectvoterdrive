@@ -2,6 +2,7 @@ import os
 import time
 import requests
 import json
+import subprocess
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -17,49 +18,73 @@ class VoterInfoBot:
         self.website_url = "https://www.elections.org.za/pw/Voter/Voter-Information"
         
     def setup_driver(self):
-        """Setup Chrome driver optimized for Render's filesystem"""
+        """Environment-aware Chrome driver setup"""
         chrome_options = Options()
         
-        # Render-specific options
+        # Essential options for headless environments
         chrome_options.add_argument("--headless")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-gpu")
-        chrome_options.add_argument("--remote-debugging-port=9222")
         chrome_options.add_argument("--window-size=1200,800")
         chrome_options.add_argument("--disable-blink-features=AutomationControlled")
         chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
         chrome_options.add_experimental_option('useAutomationExtension', False)
         
-        # Set Chrome binary location for Render (from /tmp/chrome)
-        chrome_options.binary_location = "/tmp/chrome/opt/google/chrome/google-chrome"
+        # Additional stability options
+        chrome_options.add_argument("--disable-extensions")
+        chrome_options.add_argument("--disable-plugins")
+        chrome_options.add_argument("--disable-images")
+        chrome_options.add_argument("--disable-javascript")
+        chrome_options.add_argument("--log-level=3")
+        
+        print("Checking Chrome availability...")
         
         try:
-            # Use ChromeDriver from /tmp location
-            chromedriver_path = "/tmp/chromedriver-linux64/chromedriver"
-            service = Service(executable_path=chromedriver_path)
-            self.driver = webdriver.Chrome(service=service, options=chrome_options)
-            print("✓ ChromeDriver setup successful")
+            # Method 1: Try system Chrome first (Render's default)
+            print("Attempting to use system Chrome...")
+            self.driver = webdriver.Chrome(options=chrome_options)
+            print("✓ System Chrome setup successful")
             
         except Exception as e:
-            print(f"ChromeDriver setup failed: {e}")
-            # Fallback - let Selenium manage driver
+            print(f"System Chrome failed: {e}")
+            
+            # Method 2: Try ChromeDriver Manager as fallback
             try:
-                print("Trying fallback driver setup...")
-                self.driver = webdriver.Chrome(options=chrome_options)
-                print("✓ Fallback driver setup successful")
-            except Exception as fallback_error:
-                print(f"Fallback driver setup failed: {fallback_error}")
-                # Last resort - use system ChromeDriver if available
+                print("Trying ChromeDriver Manager...")
+                from webdriver_manager.chrome import ChromeDriverManager
+                
+                service = Service(ChromeDriverManager().install())
+                self.driver = webdriver.Chrome(service=service, options=chrome_options)
+                print("✓ ChromeDriver Manager setup successful")
+                
+            except Exception as manager_error:
+                print(f"ChromeDriver Manager failed: {manager_error}")
+                
+                # Method 3: Try with explicit service
                 try:
+                    print("Trying explicit service...")
                     service = Service()
                     self.driver = webdriver.Chrome(service=service, options=chrome_options)
-                    print("✓ System ChromeDriver setup successful")
-                except Exception as final_error:
-                    print(f"All driver setup methods failed: {final_error}")
-                    raise
+                    print("✓ Explicit service setup successful")
+                except Exception as service_error:
+                    print(f"Explicit service failed: {service_error}")
+                    
+                    # Method 4: Final fallback - let Selenium handle everything
+                    try:
+                        print("Trying final fallback...")
+                        self.driver = webdriver.Chrome(options=chrome_options)
+                        print("✓ Final fallback setup successful")
+                    except Exception as final_error:
+                        print(f"All driver setup methods failed: {final_error}")
+                        raise Exception(f"Could not initialize ChromeDriver: {str(final_error)}")
         
+        # Additional anti-detection measures
         self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+        self.driver.execute_cdp_cmd('Network.setUserAgentOverride', {
+            "userAgent": 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        })
+        
         return self.driver
 
     def solve_recaptcha_v2(self, site_key, page_url):
@@ -132,6 +157,19 @@ class VoterInfoBot:
                 responseElement.value = arguments[0];
                 responseElement.innerHTML = arguments[0];
             }
+            """,
+            """
+            var iframes = document.getElementsByTagName('iframe');
+            for (var i = 0; i < iframes.length; i++) {
+                var iframe = iframes[i];
+                try {
+                    var iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                    var responseElement = iframeDoc.getElementById('g-recaptcha-response');
+                    if (responseElement) {
+                        responseElement.value = arguments[0];
+                    }
+                } catch(e) {}
+            }
             """
         ]
         
@@ -140,7 +178,8 @@ class VoterInfoBot:
                 self.driver.execute_script(script, solution)
                 print("✓ Solution injected successfully")
                 break
-            except:
+            except Exception as e:
+                print(f"Script injection failed: {e}")
                 continue
         
         time.sleep(2)
@@ -150,8 +189,9 @@ class VoterInfoBot:
         voter_data = {}
         
         try:
+            # Wait for results page to load
             WebDriverWait(self.driver, 20).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, ".form-row"))
+                EC.presence_of_element_located((By.CSS_SELECTOR, ".form-row, .form-group, input, div"))
             )
             
             print("Results page loaded!")
@@ -167,15 +207,33 @@ class VoterInfoBot:
             
             for key, field_id in fields.items():
                 try:
-                    voter_data[key] = self.driver.find_element(By.ID, field_id).text.strip()
+                    element = self.driver.find_element(By.ID, field_id)
+                    voter_data[key] = element.text.strip()
                     print(f"Found {key}: {voter_data[key]}")
-                except:
+                except Exception as e:
                     voter_data[key] = "Not found"
-                    print(f"Could not find {key}")
+                    print(f"Could not find {key}: {e}")
+            
+            # Alternative extraction methods if primary fails
+            if all(value == "Not found" for value in voter_data.values()):
+                print("Trying alternative extraction methods...")
+                try:
+                    # Look for any text content that might contain voter info
+                    body_text = self.driver.find_element(By.TAG_NAME, "body").text
+                    lines = body_text.split('\n')
+                    for line in lines:
+                        if 'name' in line.lower() and voter_data['name'] == "Not found":
+                            voter_data['name'] = line.strip()
+                        elif 'ward' in line.lower() and voter_data['ward'] == "Not found":
+                            voter_data['ward'] = line.strip()
+                        elif 'station' in line.lower() and voter_data['voting_station'] == "Not found":
+                            voter_data['voting_station'] = line.strip()
+                except Exception as e:
+                    print(f"Alternative extraction failed: {e}")
                     
         except Exception as e:
             print(f"Error extracting information: {e}")
-            voter_data["error"] = "Failed to extract voter data"
+            voter_data["error"] = f"Failed to extract voter data: {str(e)}"
         
         return voter_data
     
@@ -185,33 +243,41 @@ class VoterInfoBot:
             print("Navigating to voter information page...")
             self.driver.get(self.website_url)
             
+            # Wait for page to load
             WebDriverWait(self.driver, 15).until(
                 EC.presence_of_element_located((By.TAG_NAME, "body"))
             )
             
-            time.sleep(2)
+            time.sleep(3)
             
             # Find and fill ID field
             id_input = None
             selectors = [
                 "input#IDNumber",
                 "input[name='IDNumber']", 
-                "input[type='text']"
+                "input[type='text']",
+                "input[placeholder*='ID']",
+                "input[placeholder*='id']"
             ]
             
             for selector in selectors:
                 try:
                     id_input = self.driver.find_element(By.CSS_SELECTOR, selector)
-                    break
+                    if id_input.is_displayed() and id_input.is_enabled():
+                        break
                 except:
                     continue
             
             if not id_input:
+                # Try to find any text input
                 inputs = self.driver.find_elements(By.CSS_SELECTOR, "input[type='text']")
-                if inputs:
-                    id_input = inputs[0]
-                else:
-                    raise Exception("Could not find ID input field")
+                for input_field in inputs:
+                    if input_field.is_displayed() and input_field.is_enabled():
+                        id_input = input_field
+                        break
+            
+            if not id_input:
+                raise Exception("Could not find ID input field")
             
             id_input.clear()
             id_input.send_keys(id_number)
@@ -226,16 +292,21 @@ class VoterInfoBot:
             submit_selectors = [
                 "input[type='submit']",
                 "button[type='submit']",
-                ".btn-primary"
+                ".btn-primary",
+                ".btn",
+                "button",
+                "input[value*='Submit']",
+                "input[value*='submit']"
             ]
             
             for selector in submit_selectors:
                 try:
                     submit_button = self.driver.find_element(By.CSS_SELECTOR, selector)
-                    submit_button.click()
-                    print("Form submitted")
-                    time.sleep(5)
-                    return True
+                    if submit_button.is_displayed() and submit_button.is_enabled():
+                        submit_button.click()
+                        print("Form submitted")
+                        time.sleep(5)
+                        return True
                 except:
                     continue
             
@@ -251,12 +322,33 @@ class VoterInfoBot:
             self.setup_driver()
             success = self.enter_voter_info(id_number)
             
-            if success and "My-ID-Information-Details" in self.driver.current_url:
-                print("Successfully reached results page!")
-                voter_data = self.extract_voter_information()
-                return voter_data
+            if success:
+                print("Checking if we reached results page...")
+                print(f"Current URL: {self.driver.current_url}")
+                
+                # Check various success indicators
+                success_indicators = [
+                    "My-ID-Information-Details" in self.driver.current_url,
+                    "details" in self.driver.current_url.lower(),
+                    "information" in self.driver.current_url.lower()
+                ]
+                
+                if any(success_indicators):
+                    print("Successfully reached results page!")
+                    voter_data = self.extract_voter_information()
+                    return voter_data
+                else:
+                    # Take screenshot for debugging
+                    try:
+                        screenshot_path = f"/tmp/error_{id_number}.png"
+                        self.driver.save_screenshot(screenshot_path)
+                        print(f"Screenshot saved to: {screenshot_path}")
+                    except:
+                        print("Could not save screenshot")
+                    
+                    return {"error": "Failed to reach results page after submission"}
             else:
-                return {"error": "Failed to retrieve voter information"}
+                return {"error": "Failed to submit voter information"}
                 
         except Exception as e:
             return {"error": f"Bot execution failed: {str(e)}"}
@@ -312,7 +404,8 @@ def verify_voter():
         return jsonify(response_data)
         
     except Exception as e:
-        return jsonify({"error": f"Server error: {str(e)}"}), 500
+        print(f"Server error: {str(e)}")
+        return jsonify({"error": f"Server configuration error: {str(e)}"}), 500
 
 def calculate_age_from_id(id_number):
     try:
@@ -330,13 +423,39 @@ def calculate_age_from_id(id_number):
     except:
         return "Based on ID"
 
+def check_chrome_availability():
+    """Check if Chrome is available in the system"""
+    try:
+        # Check for Chrome
+        result = subprocess.run(['which', 'google-chrome'], capture_output=True, text=True)
+        if result.returncode == 0:
+            print(f"✓ Chrome found at: {result.stdout.strip()}")
+        else:
+            print("✗ Chrome not found in PATH")
+        
+        # Check for chromedriver
+        result = subprocess.run(['which', 'chromedriver'], capture_output=True, text=True)
+        if result.returncode == 0:
+            print(f"✓ ChromeDriver found at: {result.stdout.strip()}")
+        else:
+            print("✗ ChromeDriver not found in PATH")
+            
+    except Exception as e:
+        print(f"Chrome availability check failed: {e}")
+
 def run_flask_app():
     port = int(os.environ.get('PORT', 5000))
     debug = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
     
+    print("=" * 50)
+    print("Voter Information Bot - Render Deployment")
+    print("=" * 50)
+    
+    # Check system dependencies
+    check_chrome_availability()
+    
     print(f"Starting server on port {port}")
-    print("Chrome path: /tmp/chrome/opt/google/chrome/google-chrome")
-    print("ChromeDriver path: /tmp/chromedriver-linux64/chromedriver")
+    print(f"Debug mode: {debug}")
     
     if debug:
         app.run(host='0.0.0.0', port=port, debug=True)
@@ -346,7 +465,7 @@ def run_flask_app():
             print("Using Waitress production server")
             serve(app, host='0.0.0.0', port=port)
         except ImportError:
-            print("Using Flask development server")
+            print("Waitress not available, using Flask development server")
             app.run(host='0.0.0.0', port=port, debug=False)
 
 def main():
