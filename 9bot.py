@@ -2,91 +2,37 @@ import os
 import time
 import requests
 import json
-import subprocess
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
 from flask import Flask, request, jsonify
+import threading
 
 class VoterInfoBot:
     def __init__(self):
         self.driver = None
-        self.two_captcha_api_key = os.environ.get('TWO_CAPTCHA_API_KEY', '6a618c70ab1c170d5ee4706d077cfbda')
+        self.two_captcha_api_key = "6a618c70ab1c170d5ee4706d077cfbda"
         self.website_url = "https://www.elections.org.za/pw/Voter/Voter-Information"
+        self.results_url = "https://www.elections.org.za/pw/Voter/My-ID-Information-Details"
         
     def setup_driver(self):
-        """Environment-aware Chrome driver setup"""
+        """Setup Chrome driver with appropriate options"""
         chrome_options = Options()
-        
-        # Essential options for headless environments
+        # FORCE HEADLESS MODE
         chrome_options.add_argument("--headless")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.add_argument("--disable-gpu")
-        chrome_options.add_argument("--window-size=1200,800")
         chrome_options.add_argument("--disable-blink-features=AutomationControlled")
         chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
         chrome_options.add_experimental_option('useAutomationExtension', False)
+        chrome_options.add_argument("--window-size=1200,800")
         
-        # Additional stability options
-        chrome_options.add_argument("--disable-extensions")
-        chrome_options.add_argument("--disable-plugins")
-        chrome_options.add_argument("--disable-images")
-        chrome_options.add_argument("--disable-javascript")
-        chrome_options.add_argument("--log-level=3")
-        
-        print("Checking Chrome availability...")
-        
-        try:
-            # Method 1: Try system Chrome first (Render's default)
-            print("Attempting to use system Chrome...")
-            self.driver = webdriver.Chrome(options=chrome_options)
-            print("✓ System Chrome setup successful")
-            
-        except Exception as e:
-            print(f"System Chrome failed: {e}")
-            
-            # Method 2: Try ChromeDriver Manager as fallback
-            try:
-                print("Trying ChromeDriver Manager...")
-                from webdriver_manager.chrome import ChromeDriverManager
-                
-                service = Service(ChromeDriverManager().install())
-                self.driver = webdriver.Chrome(service=service, options=chrome_options)
-                print("✓ ChromeDriver Manager setup successful")
-                
-            except Exception as manager_error:
-                print(f"ChromeDriver Manager failed: {manager_error}")
-                
-                # Method 3: Try with explicit service
-                try:
-                    print("Trying explicit service...")
-                    service = Service()
-                    self.driver = webdriver.Chrome(service=service, options=chrome_options)
-                    print("✓ Explicit service setup successful")
-                except Exception as service_error:
-                    print(f"Explicit service failed: {service_error}")
-                    
-                    # Method 4: Final fallback - let Selenium handle everything
-                    try:
-                        print("Trying final fallback...")
-                        self.driver = webdriver.Chrome(options=chrome_options)
-                        print("✓ Final fallback setup successful")
-                    except Exception as final_error:
-                        print(f"All driver setup methods failed: {final_error}")
-                        raise Exception(f"Could not initialize ChromeDriver: {str(final_error)}")
-        
-        # Additional anti-detection measures
+        self.driver = webdriver.Chrome(options=chrome_options)
         self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-        self.driver.execute_cdp_cmd('Network.setUserAgentOverride', {
-            "userAgent": 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        })
-        
         return self.driver
-
+        
     def solve_recaptcha_v2(self, site_key, page_url):
         """Solve reCAPTCHA v2 using 2Captcha service"""
         print("Submitting captcha to 2captcha...")
@@ -99,42 +45,40 @@ class VoterInfoBot:
             'json': 1
         }
         
-        try:
-            response = requests.post('http://2captcha.com/in.php', data=captcha_data, timeout=30)
-            result = response.json()
+        response = requests.post('http://2captcha.com/in.php', data=captcha_data)
+        result = response.json()
+        
+        if result['status'] != 1:
+            raise Exception(f"Failed to submit captcha: {result.get('error_text', 'Unknown error')}")
+        
+        captcha_id = result['request']
+        print(f"Captcha submitted successfully. ID: {captcha_id}")
+        
+        # Wait for captcha to be solved
+        print("Waiting for captcha solution... (this can take 10-60 seconds)")
+        for i in range(60):
+            time.sleep(5)
+            result_response = requests.get(
+                f'http://2captcha.com/res.php?key={self.two_captcha_api_key}'
+                f'&action=get&id={captcha_id}&json=1'
+            )
+            result_data = result_response.json()
             
-            if result['status'] != 1:
-                raise Exception(f"Failed to submit captcha: {result.get('error_text', 'Unknown error')}")
+            if result_data['status'] == 1:
+                print("Captcha solved successfully!")
+                return result_data['request']
+            elif result_data['request'] != 'CAPCHA_NOT_READY':
+                raise Exception(f"Captcha solving failed: {result_data.get('error_text', 'Unknown error')}")
             
-            captcha_id = result['request']
-            print(f"Captcha submitted successfully. ID: {captcha_id}")
-            
-            # Wait for solution
-            for i in range(60):
-                time.sleep(5)
-                result_response = requests.get(
-                    f'http://2captcha.com/res.php?key={self.two_captcha_api_key}&action=get&id={captcha_id}&json=1',
-                    timeout=30
-                )
-                result_data = result_response.json()
-                
-                if result_data['status'] == 1:
-                    print("Captcha solved successfully!")
-                    return result_data['request']
-                elif result_data['request'] != 'CAPCHA_NOT_READY':
-                    raise Exception(f"Captcha solving failed: {result_data.get('error_text', 'Unknown error')}")
-                
-                if i % 5 == 0:
-                    print(f"Waiting for captcha... ({i*5} seconds)")
-            
-            raise Exception("Captcha solving timeout")
-            
-        except Exception as e:
-            raise Exception(f"Captcha service error: {str(e)}")
+            if i % 5 == 0:
+                print(f"Still waiting... ({i*5} seconds)")
+        
+        raise Exception("Captcha solving timeout (5 minutes)")
     
     def find_recaptcha_elements(self):
-        """Find reCAPTCHA elements"""
+        """Find reCAPTCHA elements and return site key"""
         try:
+            # Method 1: Look for data-sitekey attribute
             recaptcha_divs = self.driver.find_elements(By.CSS_SELECTOR, "div[data-sitekey]")
             for div in recaptcha_divs:
                 site_key = div.get_attribute('data-sitekey')
@@ -144,176 +88,265 @@ class VoterInfoBot:
         except Exception as e:
             print(f"Data-sitekey method failed: {e}")
         
-        raise Exception("Could not find reCAPTCHA elements")
+        try:
+            # Method 2: Look for iframe with recaptcha
+            recaptcha_iframes = self.driver.find_elements(By.CSS_SELECTOR, "iframe[src*='google.com/recaptcha']")
+            for iframe in recaptcha_iframes:
+                src = iframe.get_attribute('src')
+                if 'recaptcha' in src:
+                    import re
+                    site_key_match = re.search(r'k=([^&]+)', src)
+                    if site_key_match:
+                        site_key = site_key_match.group(1)
+                        print(f"Found reCAPTCHA site key from iframe: {site_key}")
+                        return site_key
+        except Exception as e:
+            print(f"Iframe method failed: {e}")
+            
+        raise Exception("Could not find reCAPTCHA elements on the page")
     
     def inject_recaptcha_solution(self, solution):
-        """Inject the recaptcha solution"""
+        """Inject the recaptcha solution properly"""
         print("Injecting recaptcha solution...")
         
+        # Multiple methods to inject the solution
         scripts = [
+            # Method 1: Set g-recaptcha-response textarea
+            """
+            var responseElement = document.getElementById('g-recaptcha-response');
+            if (responseElement) {
+                responseElement.innerHTML = arguments[0];
+            }
+            """,
+            
+            # Method 2: Set the value attribute
+            """
+            var responseElement = document.getElementById('g-recaptcha-response');
+            if (responseElement) {
+                responseElement.value = arguments[0];
+            }
+            """,
+            
+            # Method 3: Create element if it doesn't exist
+            """
+            var responseElement = document.getElementById('g-recaptcha-response');
+            if (!responseElement) {
+                responseElement = document.createElement('textarea');
+                responseElement.id = 'g-recaptcha-response';
+                responseElement.name = 'g-recaptcha-response';
+                responseElement.style.display = 'none';
+                document.body.appendChild(responseElement);
+            }
+            responseElement.value = arguments[0];
+            responseElement.innerHTML = arguments[0];
+            """,
+            
+            # Method 4: Dispatch events to trigger validation
             """
             var responseElement = document.getElementById('g-recaptcha-response');
             if (responseElement) {
                 responseElement.value = arguments[0];
                 responseElement.innerHTML = arguments[0];
-            }
-            """,
-            """
-            var iframes = document.getElementsByTagName('iframe');
-            for (var i = 0; i < iframes.length; i++) {
-                var iframe = iframes[i];
-                try {
-                    var iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-                    var responseElement = iframeDoc.getElementById('g-recaptcha-response');
-                    if (responseElement) {
-                        responseElement.value = arguments[0];
-                    }
-                } catch(e) {}
+                
+                // Trigger events
+                var event = new Event('change', { bubbles: true });
+                responseElement.dispatchEvent(event);
+                
+                var inputEvent = new Event('input', { bubbles: true });
+                responseElement.dispatchEvent(inputEvent);
             }
             """
         ]
         
-        for script in scripts:
+        for i, script in enumerate(scripts):
             try:
                 self.driver.execute_script(script, solution)
-                print("✓ Solution injected successfully")
+                print(f"Successfully injected solution with method {i+1}")
                 break
             except Exception as e:
-                print(f"Script injection failed: {e}")
+                print(f"Method {i+1} failed: {e}")
                 continue
         
-        time.sleep(2)
+        # Additional wait and verification
+        time.sleep(3)
+        
+        # Verify the solution was injected
+        try:
+            response_element = self.driver.find_element(By.ID, "g-recaptcha-response")
+            injected_value = self.driver.execute_script("return arguments[0].value", response_element)
+            if injected_value == solution:
+                print("✓ Recaptcha solution verified successfully!")
+            else:
+                print("⚠ Recaptcha solution may not have been set properly")
+        except:
+            print("⚠ Could not verify recaptcha solution injection")
     
     def extract_voter_information(self):
-        """Extract voter information from results page"""
+        """Extract voter information from the results page"""
+        print("Extracting voter information from results page...")
+        
         voter_data = {}
         
         try:
-            # Wait for results page to load
+            # Wait for the results page to load
             WebDriverWait(self.driver, 20).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, ".form-row, .form-group, input, div"))
+                EC.presence_of_element_located((By.CSS_SELECTOR, ".form-row"))
             )
             
-            print("Results page loaded!")
+            print("Results page loaded successfully!")
             
-            fields = {
-                "identity_number": "MainContent_uxIDNumberDataField",
-                "ward": "MainContent_uxWardDataField", 
-                "voting_district": "MainContent_uxVDDataField",
-                "name": "MainContent_uxVSNameDataField",
-                "address": "MainContent_uxVSAddressDataField",
-                "voting_station": "MainContent_uxVotingStationDataField"
-            }
+            # Extract data from the first form-row section
+            try:
+                voter_data["identity_number"] = self.driver.find_element(By.ID, "MainContent_uxIDNumberDataField").text.strip()
+                print(f"Found ID: {voter_data['identity_number']}")
+            except:
+                voter_data["identity_number"] = "Not found"
+                print("Could not find identity number")
+                
+            try:
+                voter_data["ward"] = self.driver.find_element(By.ID, "MainContent_uxWardDataField").text.strip()
+                print(f"Found ward: {voter_data['ward']}")
+            except:
+                voter_data["ward"] = "Not found"
+                print("Could not find ward")
+                
+            try:
+                voter_data["voting_district"] = self.driver.find_element(By.ID, "MainContent_uxVDDataField").text.strip()
+                print(f"Found voting district: {voter_data['voting_district']}")
+            except:
+                voter_data["voting_district"] = "Not found"
+                print("Could not find voting district")
             
-            for key, field_id in fields.items():
-                try:
-                    element = self.driver.find_element(By.ID, field_id)
-                    voter_data[key] = element.text.strip()
-                    print(f"Found {key}: {voter_data[key]}")
-                except Exception as e:
-                    voter_data[key] = "Not found"
-                    print(f"Could not find {key}: {e}")
-            
-            # Alternative extraction methods if primary fails
-            if all(value == "Not found" for value in voter_data.values()):
-                print("Trying alternative extraction methods...")
-                try:
-                    # Look for any text content that might contain voter info
-                    body_text = self.driver.find_element(By.TAG_NAME, "body").text
-                    lines = body_text.split('\n')
-                    for line in lines:
-                        if 'name' in line.lower() and voter_data['name'] == "Not found":
-                            voter_data['name'] = line.strip()
-                        elif 'ward' in line.lower() and voter_data['ward'] == "Not found":
-                            voter_data['ward'] = line.strip()
-                        elif 'station' in line.lower() and voter_data['voting_station'] == "Not found":
-                            voter_data['voting_station'] = line.strip()
-                except Exception as e:
-                    print(f"Alternative extraction failed: {e}")
+            # Extract data from the second form-row section
+            try:
+                voter_data["name"] = self.driver.find_element(By.ID, "MainContent_uxVSNameDataField").text.strip()
+                print(f"Found name: {voter_data['name']}")
+            except:
+                voter_data["name"] = "Not found"
+                print("Could not find name")
+                
+            try:
+                voter_data["address"] = self.driver.find_element(By.ID, "MainContent_uxVSAddressDataField").text.strip()
+                # Clean up address formatting
+                voter_data["address"] = ' '.join(voter_data["address"].split())
+                print(f"Found address: {voter_data['address']}")
+            except:
+                voter_data["address"] = "Not found"
+                print("Could not find address")
+                
+            # Extract voting station information
+            try:
+                voter_data["voting_station"] = self.driver.find_element(By.ID, "MainContent_uxVotingStationDataField").text.strip()
+                print(f"Found voting station: {voter_data['voting_station']}")
+            except:
+                # If specific voting station element not found, use address
+                voter_data["voting_station"] = voter_data.get("address", "Not found")
+                print("Using address as voting station")
                     
         except Exception as e:
-            print(f"Error extracting information: {e}")
-            voter_data["error"] = f"Failed to extract voter data: {str(e)}"
+            print(f"Error extracting voter information: {e}")
+            # Save page for debugging
+            with open("debug_extraction.html", "w", encoding="utf-8") as f:
+                f.write(self.driver.page_source)
+            print("Saved debug_extraction.html for inspection")
         
         return voter_data
     
     def enter_voter_info(self, id_number):
         """Enter voter ID and solve captcha"""
         try:
+            # Navigate to the voter information page
             print("Navigating to voter information page...")
             self.driver.get(self.website_url)
             
-            # Wait for page to load
+            # Wait for page to load completely
             WebDriverWait(self.driver, 15).until(
                 EC.presence_of_element_located((By.TAG_NAME, "body"))
             )
             
             time.sleep(3)
             
-            # Find and fill ID field
+            # Find the ID input field
+            print("Looking for ID input field...")
             id_input = None
+            
+            # Try the most common selectors
             selectors = [
                 "input#IDNumber",
                 "input[name='IDNumber']", 
                 "input[type='text']",
-                "input[placeholder*='ID']",
-                "input[placeholder*='id']"
+                "input.form-control"
             ]
             
             for selector in selectors:
                 try:
                     id_input = self.driver.find_element(By.CSS_SELECTOR, selector)
-                    if id_input.is_displayed() and id_input.is_enabled():
-                        break
+                    print(f"Found input field using: {selector}")
+                    break
                 except:
                     continue
             
             if not id_input:
-                # Try to find any text input
+                # Last resort: get all text inputs and use the first one
                 inputs = self.driver.find_elements(By.CSS_SELECTOR, "input[type='text']")
-                for input_field in inputs:
-                    if input_field.is_displayed() and input_field.is_enabled():
-                        id_input = input_field
-                        break
+                if inputs:
+                    id_input = inputs[0]
+                    print("Using first text input field")
+                else:
+                    raise Exception("Could not find ID input field")
             
-            if not id_input:
-                raise Exception("Could not find ID input field")
-            
+            # Enter the ID number
             id_input.clear()
             id_input.send_keys(id_number)
-            print(f"Entered ID: {id_number}")
+            print(f"Entered ID number: {id_number}")
+            
+            # Find reCAPTCHA
+            print("Looking for reCAPTCHA...")
+            site_key = self.find_recaptcha_elements()
             
             # Solve captcha
-            site_key = self.find_recaptcha_elements()
             captcha_solution = self.solve_recaptcha_v2(site_key, self.website_url)
+            
+            # Inject the captcha solution
             self.inject_recaptcha_solution(captcha_solution)
             
-            # Find and click submit
+            # Wait a moment for the captcha to register
+            time.sleep(3)
+            
+            # Find and click submit button
+            submit_button = None
             submit_selectors = [
                 "input[type='submit']",
                 "button[type='submit']",
                 ".btn-primary",
-                ".btn",
-                "button",
                 "input[value*='Submit']",
-                "input[value*='submit']"
+                "input[value*='Search']"
             ]
             
             for selector in submit_selectors:
                 try:
                     submit_button = self.driver.find_element(By.CSS_SELECTOR, selector)
-                    if submit_button.is_displayed() and submit_button.is_enabled():
-                        submit_button.click()
-                        print("Form submitted")
-                        time.sleep(5)
-                        return True
+                    print(f"Found submit button using: {selector}")
+                    break
                 except:
                     continue
             
-            return False
+            if submit_button:
+                print("Submitting form...")
+                submit_button.click()
+                
+                # Wait for navigation
+                time.sleep(5)
+                return True
+            else:
+                # In headless mode, we can't ask for manual submission
+                print("Could not find submit button in headless mode.")
+                return False
             
         except Exception as e:
             print(f"Error during voter info entry: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return False
     
     def get_voter_information(self, id_number):
@@ -323,93 +356,131 @@ class VoterInfoBot:
             success = self.enter_voter_info(id_number)
             
             if success:
-                print("Checking if we reached results page...")
-                print(f"Current URL: {self.driver.current_url}")
+                print("Form submitted! Checking for results...")
                 
-                # Check various success indicators
-                success_indicators = [
-                    "My-ID-Information-Details" in self.driver.current_url,
-                    "details" in self.driver.current_url.lower(),
-                    "information" in self.driver.current_url.lower()
-                ]
-                
-                if any(success_indicators):
+                # Check if we're on the results page
+                current_url = self.driver.current_url
+                if "My-ID-Information-Details" in current_url:
                     print("Successfully reached results page!")
+                    
+                    # Extract voter information
                     voter_data = self.extract_voter_information()
+                    
+                    # Display results
+                    self.display_results(voter_data)
+                    
+                    # Save to JSON file
+                    self.save_results(voter_data, id_number)
+                    
                     return voter_data
                 else:
-                    # Take screenshot for debugging
-                    try:
-                        screenshot_path = f"/tmp/error_{id_number}.png"
-                        self.driver.save_screenshot(screenshot_path)
-                        print(f"Screenshot saved to: {screenshot_path}")
-                    except:
-                        print("Could not save screenshot")
+                    print(f"Not on results page. Current URL: {current_url}")
+                    print("This might indicate a captcha verification issue.")
                     
-                    return {"error": "Failed to reach results page after submission"}
+                    # Save current page for debugging
+                    with open("captcha_issue_debug.html", "w", encoding="utf-8") as f:
+                        f.write(self.driver.page_source)
+                    print("Saved captcha_issue_debug.html for inspection")
+                    
+                    return {"error": "Captcha verification may have failed"}
+                    
             else:
-                return {"error": "Failed to submit voter information"}
+                return {"error": "Failed to submit form"}
                 
         except Exception as e:
             return {"error": f"Bot execution failed: {str(e)}"}
         finally:
             if self.driver:
-                try:
-                    self.driver.quit()
-                except:
-                    pass
+                # No need to wait for user input in headless mode
+                print("\nClosing browser...")
+                self.driver.quit()
+    
+    def display_results(self, voter_data):
+        """Display voter information in a formatted way"""
+        if "error" in voter_data:
+            print(f"Error: {voter_data['error']}")
+            return
+        
+        print("\n" + "="*60)
+        print("VOTER INFORMATION RESULTS")
+        print("="*60)
+        
+        fields = [
+            ("Identity Number", "identity_number"),
+            ("Name", "name"), 
+            ("Ward", "ward"),
+            ("Voting District", "voting_district"),
+            ("Address", "address"),
+            ("Voting Station", "voting_station")
+        ]
+        
+        for display_name, data_key in fields:
+            if data_key in voter_data and voter_data[data_key] != "Not found":
+                print(f"{display_name}: {voter_data[data_key]}")
+        
+        print("="*60)
+    
+    def save_results(self, voter_data, id_number):
+        """Save results to JSON file"""
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        filename = f"voter_info_{id_number}_{timestamp}.json"
+        with open(filename, 'w', encoding='utf-8') as f:
+            json.dump(voter_data, f, indent=2, ensure_ascii=False)
+        print(f"Data saved to: {filename}")
 
-# Flask app
+# Flask app to serve the HTML and handle API requests
 app = Flask(__name__)
+bot = VoterInfoBot()
 
 @app.route('/')
 def serve_html():
-    try:
-        with open('ConnectVoterDrive.html', 'r', encoding='utf-8') as f:
-            return f.read()
-    except FileNotFoundError:
-        return "HTML file not found", 404
+    """Serve the ConnectVoterDrive.html file"""
+    with open('ConnectVoterDrive.html', 'r', encoding='utf-8') as f:
+        return f.read()
 
 @app.route('/verify_voter', methods=['POST'])
 def verify_voter():
-    data = request.get_json(silent=True)
-    
-    if not data:
-        return jsonify({"error": "Invalid JSON"}), 400
-        
+    """API endpoint to verify voter information"""
+    data = request.json
     id_number = data.get('id_number')
     
-    if not id_number or len(id_number) != 13 or not id_number.isdigit():
-        return jsonify({"error": "Invalid ID number"}), 400
+    if not id_number:
+        return jsonify({"error": "ID number is required"}), 400
     
-    print(f"Processing ID: {id_number}")
+    print(f"Received verification request for ID: {id_number}")
     
     try:
-        bot = VoterInfoBot()
+        # Run the bot to get voter information
         voter_data = bot.get_voter_information(id_number)
         
         if "error" in voter_data:
             return jsonify({"error": voter_data["error"]}), 500
         
+        # Format the response for the HTML form
         response_data = {
             "success": True,
             "fullName": voter_data.get("name", "Not found"),
             "age": calculate_age_from_id(id_number),
             "ward": voter_data.get("ward", "Not found"),
             "votingDistrict": voter_data.get("voting_district", "Not found"),
-            "votingStation": voter_data.get("voting_station", "Not found"),
+            "votingStation": voter_data.get("voting_station", voter_data.get("address", "Not found")),
             "address": voter_data.get("address", "Not found")
         }
         
         return jsonify(response_data)
         
     except Exception as e:
-        print(f"Server error: {str(e)}")
-        return jsonify({"error": f"Server configuration error: {str(e)}"}), 500
+        print(f"Error in verify_voter: {str(e)}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
 
 def calculate_age_from_id(id_number):
+    """Calculate age from South African ID number"""
     try:
         year = int(id_number[:2])
+        month = int(id_number[2:4])
+        day = int(id_number[4:6])
+        
+        # Determine century (2000s if year < current year - 2000, else 1900s)
         current_year = int(time.strftime("%Y"))
         current_short_year = current_year % 100
         
@@ -418,59 +489,36 @@ def calculate_age_from_id(id_number):
         else:
             birth_year = 1900 + year
         
+        # Calculate age
+        current_month = int(time.strftime("%m"))
+        current_day = int(time.strftime("%d"))
+        
         age = current_year - birth_year
+        
+        # Adjust if birthday hasn't occurred yet this year
+        if current_month < month or (current_month == month and current_day < day):
+            age -= 1
+            
         return f"{age} years"
+        
     except:
         return "Based on ID"
 
-def check_chrome_availability():
-    """Check if Chrome is available in the system"""
-    try:
-        # Check for Chrome
-        result = subprocess.run(['which', 'google-chrome'], capture_output=True, text=True)
-        if result.returncode == 0:
-            print(f"✓ Chrome found at: {result.stdout.strip()}")
-        else:
-            print("✗ Chrome not found in PATH")
-        
-        # Check for chromedriver
-        result = subprocess.run(['which', 'chromedriver'], capture_output=True, text=True)
-        if result.returncode == 0:
-            print(f"✓ ChromeDriver found at: {result.stdout.strip()}")
-        else:
-            print("✗ ChromeDriver not found in PATH")
-            
-    except Exception as e:
-        print(f"Chrome availability check failed: {e}")
-
 def run_flask_app():
-    port = int(os.environ.get('PORT', 5000))
-    debug = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
-    
-    print("=" * 50)
-    print("Voter Information Bot - Render Deployment")
-    print("=" * 50)
-    
-    # Check system dependencies
-    check_chrome_availability()
-    
-    print(f"Starting server on port {port}")
-    print(f"Debug mode: {debug}")
-    
-    if debug:
-        app.run(host='0.0.0.0', port=port, debug=True)
-    else:
-        try:
-            from waitress import serve
-            print("Using Waitress production server")
-            serve(app, host='0.0.0.0', port=port)
-        except ImportError:
-            print("Waitress not available, using Flask development server")
-            app.run(host='0.0.0.0', port=port, debug=False)
+    """Run the Flask app"""
+    print("Starting Flask server on http://localhost:5000")
+    print("Access the application at: http://localhost:5000")
+    app.run(host='0.0.0.0', port=5000, debug=False)
 
 def main():
-    print("Voter Information Bot - Render Deployment")
-    print("Starting Flask server automatically for Render...")
+    """Main function - now starts Flask server by default"""
+    print("Voter Information Bot - Starting Flask Server")
+    print("=" * 50)
+    print("Flask server will start automatically...")
+    print("The application will be available at: http://localhost:5000")
+    print("=" * 50)
+    
+    # Start Flask server automatically
     run_flask_app()
 
 if __name__ == "__main__":
