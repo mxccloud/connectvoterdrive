@@ -10,22 +10,20 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from flask import Flask, request, jsonify
 import threading
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
 
 class VoterInfoBot:
     def __init__(self):
         self.driver = None
-        # Use environment variable for API key with fallback for local development
+        # Use environment variable for API key
         self.two_captcha_api_key = os.environ.get('TWO_CAPTCHA_API_KEY', '6a618c70ab1c170d5ee4706d077cfbda')
         self.website_url = "https://www.elections.org.za/pw/Voter/Voter-Information"
         self.results_url = "https://www.elections.org.za/pw/Voter/My-ID-Information-Details"
         
     def setup_driver(self):
-        """Setup Chrome driver with appropriate options for deployment"""
+        """Setup Chrome driver with appropriate options for Railway"""
         chrome_options = Options()
         
-        # Deployment-specific options
+        # Railway-specific options
         chrome_options.add_argument("--headless")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
@@ -36,49 +34,27 @@ class VoterInfoBot:
         chrome_options.add_experimental_option('useAutomationExtension', False)
         chrome_options.add_argument("--window-size=1200,800")
         
-        # For deployment environments
-        if os.environ.get('CHROME_PATH'):
-            chrome_options.binary_location = os.environ.get('CHROME_PATH')
+        # Set Chrome binary location for Railway
+        chrome_options.binary_location = os.environ.get('CHROME_PATH', '/usr/bin/google-chrome')
         
-        # Set up driver based on environment
+        # Configure ChromeDriver path for Railway
+        chrome_driver_path = os.environ.get('CHROMEDRIVER_PATH', '/usr/local/bin/chromedriver')
+        
         try:
-            # Try different possible ChromeDriver locations for various platforms
-            possible_paths = [
-                '/app/.chromedriver/bin/chromedriver',  # Railway
-                '/usr/local/bin/chromedriver',          # Heroku
-                '/usr/bin/chromedriver',                # Linux systems
-                'chromedriver',                         # Local development
-                './chromedriver'                        # Current directory
-            ]
-            
-            driver_path = None
-            for path in possible_paths:
-                if os.path.exists(path):
-                    driver_path = path
-                    print(f"Found ChromeDriver at: {path}")
-                    break
-            
-            if driver_path:
-                service = Service(executable_path=driver_path)
-                self.driver = webdriver.Chrome(service=service, options=chrome_options)
-            else:
-                # Let Selenium manage the driver automatically
-                self.driver = webdriver.Chrome(options=chrome_options)
-                
-            self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-            return self.driver
-            
+            service = Service(executable_path=chrome_driver_path)
+            self.driver = webdriver.Chrome(service=service, options=chrome_options)
         except Exception as e:
-            print(f"Error setting up Chrome driver: {e}")
-            # Fallback: try without specifying path
+            print(f"ChromeDriver setup failed: {e}")
+            # Fallback: let Selenium manage the driver
             try:
                 self.driver = webdriver.Chrome(options=chrome_options)
-                self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-                return self.driver
             except Exception as fallback_error:
-                print(f"Fallback driver setup also failed: {fallback_error}")
+                print(f"Fallback driver setup failed: {fallback_error}")
                 raise
-    
+        
+        self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+        return self.driver
+
     def solve_recaptcha_v2(self, site_key, page_url):
         """Solve reCAPTCHA v2 using 2Captcha service"""
         print("Submitting captcha to 2captcha...")
@@ -495,15 +471,9 @@ class VoterInfoBot:
 
 # Flask app setup
 app = Flask(__name__)
-bot = VoterInfoBot()
 
-# Rate limiting setup
-limiter = Limiter(
-    app=app,
-    key_func=get_remote_address,
-    default_limits=["200 per day", "50 per hour"],
-    storage_uri="memory://"
-)
+# Initialize bot instance
+bot = VoterInfoBot()
 
 @app.route('/')
 def serve_html():
@@ -515,7 +485,6 @@ def serve_html():
         return "HTML file not found. Please ensure ConnectVoterDrive.html is in the same directory.", 404
 
 @app.route('/verify_voter', methods=['POST'])
-@limiter.limit("10 per minute")  # Prevent abuse
 def verify_voter():
     """API endpoint to verify voter information"""
     data = request.get_json(silent=True)
@@ -595,6 +564,7 @@ def run_flask_app():
     debug = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
     
     print(f"Starting Flask server on port {port} (debug: {debug})")
+    print(f"Chrome path: {os.environ.get('CHROME_PATH', 'Not set')}")
     
     if debug:
         app.run(host='0.0.0.0', port=port, debug=True)
@@ -638,12 +608,6 @@ def main():
         result = bot.get_voter_information(id_number)
 
 # Error handlers
-@app.errorhandler(429)
-def ratelimit_handler(e):
-    return jsonify({
-        "error": f"Rate limit exceeded: {e.description}"
-    }), 429
-
 @app.errorhandler(404)
 def not_found_handler(e):
     return jsonify({
