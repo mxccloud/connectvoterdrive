@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: voter-info-bot
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python 9bot.py
+    envVars:
+      - key: TWO_CAPTCHA_API_KEY
+        value: 6a618c70ab1c170d5ee4706d077cfbda
