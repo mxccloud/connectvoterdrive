@@ -7,32 +7,78 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 from flask import Flask, request, jsonify
 import threading
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 class VoterInfoBot:
     def __init__(self):
         self.driver = None
-        self.two_captcha_api_key = "6a618c70ab1c170d5ee4706d077cfbda"
+        # Use environment variable for API key with fallback for local development
+        self.two_captcha_api_key = os.environ.get('TWO_CAPTCHA_API_KEY', '6a618c70ab1c170d5ee4706d077cfbda')
         self.website_url = "https://www.elections.org.za/pw/Voter/Voter-Information"
         self.results_url = "https://www.elections.org.za/pw/Voter/My-ID-Information-Details"
         
     def setup_driver(self):
-        """Setup Chrome driver with appropriate options"""
+        """Setup Chrome driver with appropriate options for deployment"""
         chrome_options = Options()
-        # FORCE HEADLESS MODE
+        
+        # Deployment-specific options
         chrome_options.add_argument("--headless")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("--remote-debugging-port=9222")
         chrome_options.add_argument("--disable-blink-features=AutomationControlled")
         chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
         chrome_options.add_experimental_option('useAutomationExtension', False)
         chrome_options.add_argument("--window-size=1200,800")
         
-        self.driver = webdriver.Chrome(options=chrome_options)
-        self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-        return self.driver
+        # For deployment environments
+        if os.environ.get('CHROME_PATH'):
+            chrome_options.binary_location = os.environ.get('CHROME_PATH')
         
+        # Set up driver based on environment
+        try:
+            # Try different possible ChromeDriver locations for various platforms
+            possible_paths = [
+                '/app/.chromedriver/bin/chromedriver',  # Railway
+                '/usr/local/bin/chromedriver',          # Heroku
+                '/usr/bin/chromedriver',                # Linux systems
+                'chromedriver',                         # Local development
+                './chromedriver'                        # Current directory
+            ]
+            
+            driver_path = None
+            for path in possible_paths:
+                if os.path.exists(path):
+                    driver_path = path
+                    print(f"Found ChromeDriver at: {path}")
+                    break
+            
+            if driver_path:
+                service = Service(executable_path=driver_path)
+                self.driver = webdriver.Chrome(service=service, options=chrome_options)
+            else:
+                # Let Selenium manage the driver automatically
+                self.driver = webdriver.Chrome(options=chrome_options)
+                
+            self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+            return self.driver
+            
+        except Exception as e:
+            print(f"Error setting up Chrome driver: {e}")
+            # Fallback: try without specifying path
+            try:
+                self.driver = webdriver.Chrome(options=chrome_options)
+                self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+                return self.driver
+            except Exception as fallback_error:
+                print(f"Fallback driver setup also failed: {fallback_error}")
+                raise
+    
     def solve_recaptcha_v2(self, site_key, page_url):
         """Solve reCAPTCHA v2 using 2Captcha service"""
         print("Submitting captcha to 2captcha...")
@@ -45,35 +91,42 @@ class VoterInfoBot:
             'json': 1
         }
         
-        response = requests.post('http://2captcha.com/in.php', data=captcha_data)
-        result = response.json()
-        
-        if result['status'] != 1:
-            raise Exception(f"Failed to submit captcha: {result.get('error_text', 'Unknown error')}")
-        
-        captcha_id = result['request']
-        print(f"Captcha submitted successfully. ID: {captcha_id}")
-        
-        # Wait for captcha to be solved
-        print("Waiting for captcha solution... (this can take 10-60 seconds)")
-        for i in range(60):
-            time.sleep(5)
-            result_response = requests.get(
-                f'http://2captcha.com/res.php?key={self.two_captcha_api_key}'
-                f'&action=get&id={captcha_id}&json=1'
-            )
-            result_data = result_response.json()
+        try:
+            response = requests.post('http://2captcha.com/in.php', data=captcha_data, timeout=30)
+            result = response.json()
             
-            if result_data['status'] == 1:
-                print("Captcha solved successfully!")
-                return result_data['request']
-            elif result_data['request'] != 'CAPCHA_NOT_READY':
-                raise Exception(f"Captcha solving failed: {result_data.get('error_text', 'Unknown error')}")
+            if result['status'] != 1:
+                raise Exception(f"Failed to submit captcha: {result.get('error_text', 'Unknown error')}")
             
-            if i % 5 == 0:
-                print(f"Still waiting... ({i*5} seconds)")
-        
-        raise Exception("Captcha solving timeout (5 minutes)")
+            captcha_id = result['request']
+            print(f"Captcha submitted successfully. ID: {captcha_id}")
+            
+            # Wait for captcha to be solved
+            print("Waiting for captcha solution... (this can take 10-60 seconds)")
+            for i in range(60):
+                time.sleep(5)
+                result_response = requests.get(
+                    f'http://2captcha.com/res.php?key={self.two_captcha_api_key}'
+                    f'&action=get&id={captcha_id}&json=1',
+                    timeout=30
+                )
+                result_data = result_response.json()
+                
+                if result_data['status'] == 1:
+                    print("Captcha solved successfully!")
+                    return result_data['request']
+                elif result_data['request'] != 'CAPCHA_NOT_READY':
+                    raise Exception(f"Captcha solving failed: {result_data.get('error_text', 'Unknown error')}")
+                
+                if i % 5 == 0:
+                    print(f"Still waiting... ({i*5} seconds)")
+            
+            raise Exception("Captcha solving timeout (5 minutes)")
+            
+        except requests.exceptions.Timeout:
+            raise Exception("Captcha service timeout - please try again")
+        except requests.exceptions.RequestException as e:
+            raise Exception(f"Network error contacting captcha service: {str(e)}")
     
     def find_recaptcha_elements(self):
         """Find reCAPTCHA elements and return site key"""
@@ -246,9 +299,12 @@ class VoterInfoBot:
         except Exception as e:
             print(f"Error extracting voter information: {e}")
             # Save page for debugging
-            with open("debug_extraction.html", "w", encoding="utf-8") as f:
-                f.write(self.driver.page_source)
-            print("Saved debug_extraction.html for inspection")
+            try:
+                with open("debug_extraction.html", "w", encoding="utf-8") as f:
+                    f.write(self.driver.page_source)
+                print("Saved debug_extraction.html for inspection")
+            except:
+                print("Could not save debug file")
         
         return voter_data
     
@@ -378,9 +434,12 @@ class VoterInfoBot:
                     print("This might indicate a captcha verification issue.")
                     
                     # Save current page for debugging
-                    with open("captcha_issue_debug.html", "w", encoding="utf-8") as f:
-                        f.write(self.driver.page_source)
-                    print("Saved captcha_issue_debug.html for inspection")
+                    try:
+                        with open("captcha_issue_debug.html", "w", encoding="utf-8") as f:
+                            f.write(self.driver.page_source)
+                        print("Saved captcha_issue_debug.html for inspection")
+                    except:
+                        print("Could not save debug file")
                     
                     return {"error": "Captcha verification may have failed"}
                     
@@ -393,7 +452,10 @@ class VoterInfoBot:
             if self.driver:
                 # No need to wait for user input in headless mode
                 print("\nClosing browser...")
-                self.driver.quit()
+                try:
+                    self.driver.quit()
+                except:
+                    pass  # Ignore errors during cleanup
     
     def display_results(self, voter_data):
         """Display voter information in a formatted way"""
@@ -422,30 +484,53 @@ class VoterInfoBot:
     
     def save_results(self, voter_data, id_number):
         """Save results to JSON file"""
-        timestamp = time.strftime("%Y%m%d_%H%M%S")
-        filename = f"voter_info_{id_number}_{timestamp}.json"
-        with open(filename, 'w', encoding='utf-8') as f:
-            json.dump(voter_data, f, indent=2, ensure_ascii=False)
-        print(f"Data saved to: {filename}")
+        try:
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            filename = f"voter_info_{id_number}_{timestamp}.json"
+            with open(filename, 'w', encoding='utf-8') as f:
+                json.dump(voter_data, f, indent=2, ensure_ascii=False)
+            print(f"Data saved to: {filename}")
+        except Exception as e:
+            print(f"Could not save results to file: {e}")
 
-# Flask app to serve the HTML and handle API requests
+# Flask app setup
 app = Flask(__name__)
 bot = VoterInfoBot()
+
+# Rate limiting setup
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://"
+)
 
 @app.route('/')
 def serve_html():
     """Serve the ConnectVoterDrive.html file"""
-    with open('ConnectVoterDrive.html', 'r', encoding='utf-8') as f:
-        return f.read()
+    try:
+        with open('ConnectVoterDrive.html', 'r', encoding='utf-8') as f:
+            return f.read()
+    except FileNotFoundError:
+        return "HTML file not found. Please ensure ConnectVoterDrive.html is in the same directory.", 404
 
 @app.route('/verify_voter', methods=['POST'])
+@limiter.limit("10 per minute")  # Prevent abuse
 def verify_voter():
     """API endpoint to verify voter information"""
-    data = request.json
+    data = request.get_json(silent=True)
+    
+    if not data:
+        return jsonify({"error": "Invalid JSON data"}), 400
+        
     id_number = data.get('id_number')
     
     if not id_number:
         return jsonify({"error": "ID number is required"}), 400
+    
+    # Validate ID number format (South African ID)
+    if len(id_number) != 13 or not id_number.isdigit():
+        return jsonify({"error": "Invalid ID number format. Must be 13 digits."}), 400
     
     print(f"Received verification request for ID: {id_number}")
     
@@ -505,9 +590,23 @@ def calculate_age_from_id(id_number):
         return "Based on ID"
 
 def run_flask_app():
-    """Run the Flask app"""
-    print("Starting Flask server on http://localhost:5000")
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    """Run the Flask app for production"""
+    port = int(os.environ.get('PORT', 5000))
+    debug = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
+    
+    print(f"Starting Flask server on port {port} (debug: {debug})")
+    
+    if debug:
+        app.run(host='0.0.0.0', port=port, debug=True)
+    else:
+        # Use production WSGI server
+        try:
+            from waitress import serve
+            print("Using Waitress production server")
+            serve(app, host='0.0.0.0', port=port)
+        except ImportError:
+            print("Waitress not available, using Flask development server")
+            app.run(host='0.0.0.0', port=port, debug=False)
 
 def main():
     """Main function with two modes: Flask server or direct execution"""
@@ -529,10 +628,33 @@ def main():
             print("No ID number provided. Exiting.")
             return
         
+        if len(id_number) != 13 or not id_number.isdigit():
+            print("Invalid ID number. Must be 13 digits.")
+            return
+        
         print(f"Processing ID: {id_number}")
         
         bot = VoterInfoBot()
         result = bot.get_voter_information(id_number)
+
+# Error handlers
+@app.errorhandler(429)
+def ratelimit_handler(e):
+    return jsonify({
+        "error": f"Rate limit exceeded: {e.description}"
+    }), 429
+
+@app.errorhandler(404)
+def not_found_handler(e):
+    return jsonify({
+        "error": "Endpoint not found"
+    }), 404
+
+@app.errorhandler(500)
+def internal_error_handler(e):
+    return jsonify({
+        "error": "Internal server error"
+    }), 500
 
 if __name__ == "__main__":
     main()
