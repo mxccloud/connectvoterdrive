@@ -1,0 +1,1203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ConnectVote - Voter Data Capture</title>
+    <meta name="description" content="Secure voter data capture application">
+    <meta name="theme-color" content="#007749">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --anc-black: #000000;
+            --anc-green: #007749;
+            --anc-gold: #FFB612;
+            --anc-light: #F5F5F5;
+            --anc-dark: #333333;
+            --anc-gray: #666666;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background-color: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+            padding: 0;
+            margin: 0;
+        }
+        
+        .container {
+            max-width: 100%;
+            padding: 0 15px;
+            margin: 0 auto;
+        }
+        
+        @media (min-width: 768px) {
+            .container {
+                max-width: 720px;
+            }
+        }
+        
+        @media (min-width: 992px) {
+            .container {
+                max-width: 960px;
+            }
+        }
+        
+        header {
+            background: linear-gradient(135deg, var(--anc-black), var(--anc-green));
+            color: white;
+            padding: 1rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        .app-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+        
+        .logo i {
+            font-size: 1.5rem;
+            color: var(--anc-gold);
+        }
+        
+        .progress-container {
+            background-color: rgba(255, 255, 255, 0.3);
+            height: 6px;
+            border-radius: 3px;
+            margin: 15px 0;
+            overflow: hidden;
+        }
+        
+        .progress-bar {
+            height: 100%;
+            background-color: var(--anc-gold);
+            width: 11%;
+            transition: width 0.3s ease;
+        }
+        
+        .step-indicator {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.7);
+        }
+        
+        .step {
+            text-align: center;
+            flex: 1;
+        }
+        
+        .step.active {
+            color: var(--anc-gold);
+            font-weight: bold;
+        }
+        
+        .step-content {
+            display: none;
+        }
+        
+        .step-content.active {
+            display: block;
+            animation: fadeIn 0.5s;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border-left: 4px solid var(--anc-green);
+        }
+        
+        h2 {
+            color: var(--anc-green);
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid var(--anc-light);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        h2 i {
+            color: var(--anc-gold);
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: var(--anc-dark);
+        }
+        
+        input, select, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 1rem;
+            transition: border 0.3s;
+        }
+        
+        input:focus, select:focus, textarea:focus {
+            border-color: var(--anc-green);
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(0, 119, 73, 0.2);
+        }
+        
+        .radio-group, .checkbox-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin: 10px 0;
+        }
+        
+        .radio-option, .checkbox-option {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+        }
+        
+        /* Fix for radio button alignment */
+        input[type="radio"],
+        input[type="checkbox"] {
+            width: auto;
+            margin: 0;
+            transform: translateY(1px);
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 12px 24px;
+            background-color: var(--anc-green);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-align: center;
+        }
+        
+        .btn:hover {
+            background-color: #00603a;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        .btn-secondary {
+            background-color: var(--anc-black);
+        }
+        
+        .btn-secondary:hover {
+            background-color: #333;
+        }
+        
+        .btn-gold {
+            background-color: var(--anc-gold);
+            color: var(--anc-black);
+        }
+        
+        .btn-gold:hover {
+            background-color: #e6a50f;
+        }
+        
+        .navigation {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 30px;
+        }
+        
+        .summary-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border-left: 4px solid var(--anc-gold);
+        }
+        
+        .summary-item {
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .summary-item:last-child {
+            border-bottom: none;
+        }
+        
+        .summary-label {
+            font-weight: bold;
+            color: var(--anc-green);
+            margin-bottom: 5px;
+        }
+        
+        footer {
+            text-align: center;
+            padding: 20px;
+            margin-top: 30px;
+            color: var(--anc-gray);
+            font-size: 0.9rem;
+            background-color: var(--anc-light);
+        }
+        
+        .notification {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: var(--anc-green);
+            color: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            display: none;
+            z-index: 1000;
+        }
+        
+        .offline-warning {
+            background-color: var(--anc-gold);
+            color: var(--anc-black);
+            padding: 10px;
+            text-align: center;
+            display: none;
+        }
+        
+        .anc-header-stripe {
+            height: 8px;
+            background: linear-gradient(to right, var(--anc-black) 0%, var(--anc-black) 33%, var(--anc-green) 33%, var(--anc-green) 66%, var(--anc-gold) 66%, var(--anc-gold) 100%);
+        }
+        
+        .loading {
+            opacity: 0.7;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="anc-header-stripe"></div>
+    
+    <div class="offline-warning" id="offlineWarning">
+        <i class="fas fa-wifi"></i> You are currently offline. Data will be synced when connection is restored.
+    </div>
+    
+    <header>
+        <div class="app-bar">
+            <div class="logo">
+                <i class="fas fa-vote-yea"></i>
+                <span>ConnectVote</span>
+            </div>
+            <div id="connectionStatus"></div>
+        </div>
+        
+        <div class="progress-container">
+            <div class="progress-bar" id="progressBar"></div>
+        </div>
+        
+        <div class="step-indicator">
+            <div class="step active" data-step="1">Verification</div>
+            <div class="step" data-step="2">Demographics</div>
+            <div class="step" data-step="3">Education</div>
+            <div class="step" data-step="4">Employment</div>
+            <div class="step" data-step="5">Social</div>
+            <div class="step" data-step="6">Community</div>
+            <div class="step" data-step="7">Political</div>
+            <div class="step" data-step="8">Communication</div>
+            <div class="step" data-step="9">Aspirations</div>
+        </div>
+    </header>
+    
+    <div class="container">
+        <!-- Step 1: Verification -->
+        <div class="step-content active" id="step1">
+            <div class="card">
+                <h2><i class="fas fa-id-card"></i> Voter Verification</h2>
+                <div class="form-group">
+                    <label for="idNumber">ID Number</label>
+                    <input type="text" id="idNumber" placeholder="Enter your South African ID number">
+                </div>
+                <button class="btn" id="verifyBtn">Verify with IEC</button>
+            </div>
+            
+            <div class="card" id="verificationResults" style="display: none;">
+                <h2>Verification Results</h2>
+                <div class="form-group">
+                    <label>Full Name</label>
+                    <input type="text" id="fullName" readonly>
+                </div>
+                <div class="form-group">
+                    <label>Age</label>
+                    <input type="text" id="age" readonly>
+                </div>
+                <div class="form-group">
+                    <label>Ward</label>
+                    <input type="text" id="ward" readonly>
+                </div>
+                <div class="form-group">
+                    <label>Voting District</label>
+                    <input type="text" id="votingDistrict" readonly>
+                </div>
+                <div class="form-group">
+                    <label>Current Voting Station</label>
+                    <input type="text" id="votingStation" readonly>
+                </div>
+                
+                <div class="form-group">
+                    <label>Do you want to change your voting station?</label>
+                    <div class="radio-group">
+                        <label class="radio-option">
+                            <input type="radio" name="changeStation" value="yes"> Yes
+                        </label>
+                        <label class="radio-option">
+                            <input type="radio" name="changeStation" value="no" checked> No
+                        </label>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="navigation">
+                <div></div>
+                <button class="btn btn-gold" id="toStep2">Continue</button>
+            </div>
+        </div>
+        
+        <!-- Step 2: Demographics -->
+        <div class="step-content" id="step2">
+            <div class="card">
+                <h2><i class="fas fa-users"></i> Demographics</h2>
+                
+                <div class="form-group">
+                    <label>Gender</label>
+                    <div class="radio-group">
+                        <label class="radio-option">
+                            <input type="radio" name="gender" value="male"> Male
+                        </label>
+                        <label class="radio-option">
+                            <input type="radio" name="gender" value="female"> Female
+                        </label>
+                        <label class="radio-option">
+                            <input type="radio" name="gender" value="other"> Other
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>Marital Status</label>
+                    <select id="maritalStatus">
+                        <option value="">Select marital status</option>
+                        <option value="single">Single</option>
+                        <option value="married">Married</option>
+                        <option value="divorced">Divorced</option>
+                        <option value="widowed">Widowed</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="householdSize">Household Size</label>
+                    <input type="number" id="householdSize" min="1" max="20" value="1">
+                </div>
+                
+                <div class="form-group">
+                    <label>Type of Housing</label>
+                    <select id="housingType">
+                        <option value="">Select housing type</option>
+                        <option value="rdp">RDP</option>
+                        <option value="own">Own house (bond)</option>
+                        <option value="renting">Renting flat/room</option>
+                        <option value="informal">Informal shack</option>
+                        <option value="backyard">Backyard room</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="navigation">
+                <button class="btn btn-secondary" id="toStep1">Back</button>
+                <button class="btn btn-gold" id="toStep3">Continue</button>
+            </div>
+        </div>
+        
+        <!-- Step 3: Education -->
+        <div class="step-content" id="step3">
+            <div class="card">
+                <h2><i class="fas fa-graduation-cap"></i> Education</h2>
+                
+                <div class="form-group">
+                    <label>Do you have a matric certificate?</label>
+                    <div class="radio-group">
+                        <label class="radio-option">
+                            <input type="radio" name="hasMatric" value="yes"> Yes
+                        </label>
+                        <label class="radio-option">
+                            <input type="radio" name="hasMatric" value="no" checked> No
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>Highest level of education achieved:</label>
+                    <select id="educationLevel">
+                        <option value="">Select education level</option>
+                        <option value="none">None</option>
+                        <option value="grade1-11">Grade 1-11</option>
+                        <option value="matric">Matric</option>
+                        <option value="diploma">Diploma</option>
+                        <option value="degree">Degree</option>
+                        <option value="postgraduate">Postgraduate</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>Have you completed any skills or vocational training?</label>
+                    <div class="radio-group">
+                        <label class="radio-option">
+                            <input type="radio" name="hasTraining" value="yes"> Yes
+                        </label>
+                        <label class="radio-option">
+                            <input type="radio" name="hasTraining" value="no" checked> No
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="form-group" id="trainingTypeGroup" style="display: none;">
+                    <label>Type of training:</label>
+                    <select id="trainingType">
+                        <option value="">Select training type</option>
+                        <option value="plumbing">Plumbing</option>
+                        <option value="electrical">Electrical</option>
+                        <option value="ict">ICT</option>
+                        <option value="caregiving">Caregiving</option>
+                        <option value="construction">Construction</option>
+                        <option value="hospitality">Hospitality</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="navigation">
+                <button class="btn btn-secondary" id="toStep2Back">Back</button>
+                <button class="btn btn-gold" id="toStep4">Continue</button>
+            </div>
+        </div>
+        
+        <!-- Step 4: Employment -->
+        <div class="step-content" id="step4">
+            <div class="card">
+                <h2><i class="fas fa-briefcase"></i> Employment</h2>
+                
+                <div class="form-group">
+                    <label>Are you currently employed?</label>
+                    <div class="radio-group">
+                        <label class="radio-option">
+                            <input type="radio" name="isEmployed" value="yes"> Yes
+                        </label>
+                        <label class="radio-option">
+                            <input type="radio" name="isEmployed" value="no" checked> No
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="form-group" id="employmentDetails" style="display: none;">
+                    <label>Type of work:</label>
+                    <select id="employmentType">
+                        <option value="">Select employment type</option>
+                        <option value="formal">Formal</option>
+                        <option value="informal">Informal</option>
+                        <option value="part-time">Part-time</option>
+                        <option value="self-employed">Self-employed</option>
+                        <option value="contract">Contract</option>
+                        <option value="government">Government</option>
+                        <option value="private">Private sector</option>
+                    </select>
+                    
+                    <div class="form-group">
+                        <label>Main occupation:</label>
+                        <select id="occupation">
+                            <option value="">Select occupation</option>
+                            <option value="general">General worker</option>
+                            <option value="cleaner">Cleaner</option>
+                            <option value="driver">Driver</option>
+                            <option value="sales">Sales</option>
+                            <option value="artisan">Artisan</option>
+                            <option value="admin">Admin</option>
+                            <option value="security">Security</option>
+                            <option value="teacher">Teacher</option>
+                            <option value="healthcare">Healthcare</option>
+                            <option value="student">Student</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="form-group" id="unemploymentDetails">
+                    <label>Are you actively looking for work?</label>
+                    <div class="radio-group">
+                        <label class="radio-option">
+                            <input type="radio" name="lookingForWork" value="yes"> Yes
+                        </label>
+                        <label class="radio-option">
+                            <input type="radio" name="lookingForWork" value="no" checked> No
+                        </label>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>What work experience do you have?</label>
+                        <select id="workExperience">
+                            <option value="">Select experience</option>
+                            <option value="general">General worker</option>
+                            <option value="cleaner">Cleaner</option>
+                            <option value="driver">Driver</option>
+                            <option value="sales">Sales</option>
+                            <option value="artisan">Artisan</option>
+                            <option value="admin">Admin</option>
+                            <option value="security">Security</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="navigation">
+                <button class="btn btn-secondary" id="toStep3Back">Back</button>
+                <button class="btn btn-gold" id="toStep5">Continue</button>
+            </div>
+        </div>
+        
+        <!-- Step 5: Social -->
+        <div class="step-content" id="step5">
+            <div class="card">
+                <h2><i class="fas fa-hand-holding-heart"></i> Social & Family</h2>
+                
+                <div class="form-group">
+                    <label>Do you receive a social grant?</label>
+                    <select id="socialGrant">
+                        <option value="">Select grant type</option>
+                        <option value="child">Child Support</option>
+                        <option value="disability">Disability</option>
+                        <option value="oldage">Old Age</option>
+                        <option value="nsfas">NSFAS</option>
+                        <option value="none">None</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>How many children under 18 are you supporting?</label>
+                    <input type="number" id="childrenUnder18" min="0" max="20" value="0">
+                </div>
+                
+                <div class="form-group">
+                    <label>How many children in your household are of voting age (18+)?</label>
+                    <input type="number" id="childrenOver18" min="0" max="20" value="0">
+                </div>
+                
+                <div class="form-group">
+                    <label>Do you live with elderly dependents?</label>
+                    <div class="radio-group">
+                        <label class="radio-option">
+                            <input type="radio" name="elderlyDependents" value="yes"> Yes
+                        </label>
+                        <label class="radio-option">
+                            <input type="radio" name="elderlyDependents" value="no" checked> No
+                        </label>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="navigation">
+                <button class="btn btn-secondary" id="toStep4Back">Back</button>
+                <button class="btn btn-gold" id="toStep6">Continue</button>
+            </div>
+        </div>
+        
+        <!-- Step 6: Community -->
+        <div class="step-content" id="step6">
+            <div class="card">
+                <h2><i class="fas fa-users"></i> Community & Service Delivery</h2>
+                
+                <div class="form-group">
+                    <label>What is your biggest challenge in your community?</label>
+                    <select id="communityChallenge">
+                        <option value="">Select challenge</option>
+                        <option value="water">Water & Sanitation</option>
+                        <option value="electricity">Energy / Electricity</option>
+                        <option value="waste">Waste Management</option>
+                        <option value="roads">Roads & Transport</option>
+                        <option value="safety">Community Safety & Security</option>
+                        <option value="services">Community Services</option>
+                        <option value="housing">Housing & Human Settlements</option>
+                        <option value="health">Health Services</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>Please describe your problem in detail:</label>
+                    <textarea id="problemDescription" rows="4" placeholder="Describe the challenge you're facing"></textarea>
+                </div>
+            </div>
+            
+            <div class="navigation">
+                <button class="btn btn-secondary" id="toStep5Back">Back</button>
+                <button class="btn btn-gold" id="toStep7">Continue</button>
+            </div>
+        </div>
+        
+        <!-- Step 7: Political -->
+        <div class="step-content" id="step7">
+            <div class="card">
+                <h2><i class="fas fa-landmark"></i> Political Engagement</h2>
+                
+                <div class="form-group">
+                    <label>Did you vote in the last election?</label>
+                    <div class="radio-group">
+                        <label class="radio-option">
+                            <input type="radio" name="votedLastElection" value="yes"> Yes
+                        </label>
+                        <label class="radio-option">
+                            <input type="radio" name="votedLastElection" value="no"> No
+                        </label>
+                        <label class="radio-option">
+                            <input type="radio" name="votedLastElection" value="first" checked> First-time voter
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>Do you need help registering or checking your ID for voting?</label>
+                    <div class="radio-group">
+                        <label class="radio-option">
+                            <input type="radio" name="needHelp" value="yes"> Yes
+                        </label>
+                        <label class="radio-option">
+                            <input type="radio" name="needHelp" value="no" checked> No
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>Would you like to volunteer in community programmes or campaigns?</label>
+                    <div class="radio-group">
+                        <label class="radio-option">
+                            <input type="radio" name="volunteer" value="yes"> Yes
+                        </label>
+                        <label class="radio-option">
+                            <input type="radio" name="volunteer" value="no" checked> No
+                        </label>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="navigation">
+                <button class="btn btn-secondary" id="toStep6Back">Back</button>
+                <button class="btn btn-gold" id="toStep8">Continue</button>
+            </div>
+        </div>
+        
+        <!-- Step 8: Communication -->
+        <div class="step-content" id="step8">
+            <div class="card">
+                <h2><i class="fas fa-comments"></i> Communication Preferences</h2>
+                
+                <div class="form-group">
+                    <label>Do you use WhatsApp?</label>
+                    <div class="radio-group">
+                        <label class="radio-option">
+                            <input type="radio" name="useWhatsapp" value="yes"> Yes
+                        </label>
+                        <label class="radio-option">
+                            <input type="radio" name="useWhatsapp" value="no" checked> No
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>Do you have access to the internet?</label>
+                    <div class="radio-group">
+                        <label class="radio-option">
+                            <input type="radio" name="hasInternet" value="yes"> Yes
+                        </label>
+                        <label class="radio-option">
+                            <input type="radio" name="hasInternet" value="no" checked> No
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>Preferred communication method:</label>
+                    <select id="communicationMethod">
+                        <option value="">Select method</option>
+                        <option value="sms">SMS</option>
+                        <option value="whatsapp">WhatsApp</option>
+                        <option value="phone">Phone Call</option>
+                        <option value="email">Email</option>
+                        <option value="door">Door-to-door visit</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="navigation">
+                <button class="btn btn-secondary" id="toStep7Back">Back</button>
+                <button class="btn btn-gold" id="toStep9">Continue</button>
+            </div>
+        </div>
+        
+        <!-- Step 9: Personal Aspirations -->
+        <div class="step-content" id="step9">
+            <div class="card">
+                <h2><i class="fas fa-star"></i> Personal Aspirations</h2>
+                
+                <div class="form-group">
+                    <label>What is your number one personal priority right now?</label>
+                    <select id="priority">
+                        <option value="">Select your priority</option>
+                        <option value="job">Job</option>
+                        <option value="education">Education</option>
+                        <option value="business">Business support</option>
+                        <option value="housing">Housing</option>
+                        <option value="safety">Safety</option>
+                        <option value="health">Health</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>Would you like to receive notifications about opportunities?</label>
+                    <div class="radio-group">
+                        <label class="radio-option">
+                            <input type="radio" name="notifications" value="yes"> Yes
+                        </label>
+                        <label class="radio-option">
+                            <input type="radio" name="notifications" value="no" checked> No
+                        </label>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Review & Submit button is correctly placed at the end of Step 9 (Aspirations) -->
+            <div class="navigation">
+                <button class="btn btn-secondary" id="toStep8Back">Back</button>
+                <button class="btn btn-gold" id="toSummary">Review & Submit</button>
+            </div>
+        </div>
+        
+        <!-- Summary Step -->
+        <div class="step-content" id="summary">
+            <div class="card">
+                <h2><i class="fas fa-check-circle"></i> Review Your Information</h2>
+                <p>Please review all your information before submitting.</p>
+                
+                <div class="summary-card">
+                    <h3>Verification Details</h3>
+                    <div class="summary-item">
+                        <div class="summary-label">ID Number</div>
+                        <div id="summary-id"></div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="summary-label">Full Name</div>
+                        <div id="summary-name"></div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="summary-label">Voting Station</div>
+                        <div id="summary-station"></div>
+                    </div>
+                </div>
+                
+                <div class="summary-card">
+                    <h3>Demographics</h3>
+                    <div class="summary-item">
+                        <div class="summary-label">Gender & Marital Status</div>
+                        <div id="summary-demographics"></div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="summary-label">Household Size & Housing</div>
+                        <div id="summary-household"></div>
+                    </div>
+                </div>
+                
+                <div class="summary-card">
+                    <h3>Personal Priorities</h3>
+                    <div class="summary-item">
+                        <div class="summary-label">Main Priority</div>
+                        <div id="summary-priority"></div>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label class="checkbox-option">
+                        <input type="checkbox" id="consentCheck">
+                        I confirm that the information provided is accurate and consent to its use for improving service delivery.
+                    </label>
+                </div>
+                
+                <button class="btn btn-gold" id="submitBtn" disabled>Submit Information</button>
+            </div>
+        </div>
+        
+        <!-- Confirmation Screen -->
+        <div class="step-content" id="confirmation">
+            <div class="card" style="text-align: center;">
+                <div style="font-size: 4rem; color: var(--anc-green);">
+                    <i class="fas fa-check-circle"></i>
+                </div>
+                <h2>Thank You!</h2>
+                <p>Your voter profile has been successfully submitted.</p>
+                <p>Your information will help us better understand community needs and improve service delivery.</p>
+                
+                <div style="margin: 30px 0;">
+                    <button class="btn" id="downloadProfile">
+                        <i class="fas fa-download"></i> Download Profile
+                    </button>
+                </div>
+                
+                <button class="btn btn-secondary" id="newEntry">
+                    <i class="fas fa-plus"></i> Start New Entry
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="notification" id="notification">
+        <i class="fas fa-check-circle"></i> <span id="notificationText"></span>
+    </div>
+    
+    <footer>
+        <p>ConnectVote &copy; 2025 | Voter Data Capture System</p>
+        <p>This information is collected for improving service delivery and community engagement</p>
+    </footer>
+
+    <script>
+        // Current step tracking
+        let currentStep = 1;
+        const totalSteps = 9;
+        
+        // DOM Elements
+        const progressBar = document.getElementById('progressBar');
+        const stepElements = document.querySelectorAll('.step');
+        const stepContents = document.querySelectorAll('.step-content');
+        const offlineWarning = document.getElementById('offlineWarning');
+        const connectionStatus = document.getElementById('connectionStatus');
+        
+        // Initialize the app
+        function initApp() {
+            updateProgress();
+            setupEventListeners();
+            checkOnlineStatus();
+            
+            // Listen for online/offline events
+            window.addEventListener('online', () => {
+                checkOnlineStatus();
+                showNotification('Connection restored. You are back online.');
+            });
+            
+            window.addEventListener('offline', () => {
+                checkOnlineStatus();
+            });
+        }
+        
+        // Check online status and update UI
+        function checkOnlineStatus() {
+            if (navigator.onLine) {
+                offlineWarning.style.display = 'none';
+                connectionStatus.innerHTML = '<i class="fas fa-wifi" style="color: #FFB612;"></i>';
+            } else {
+                offlineWarning.style.display = 'block';
+                connectionStatus.innerHTML = '<i class="fas fa-wifi-slash" style="color: #FFB612;"></i>';
+            }
+        }
+        
+        // Show notification
+        function showNotification(message) {
+            const notification = document.getElementById('notification');
+            const notificationText = document.getElementById('notificationText');
+            
+            notificationText.textContent = message;
+            notification.style.display = 'block';
+            
+            setTimeout(() => {
+                notification.style.display = 'none';
+            }, 3000);
+        }
+        
+        // Update progress bar and step indicators
+        function updateProgress() {
+            // Update progress bar width
+            const progressPercentage = (currentStep / totalSteps) * 100;
+            progressBar.style.width = `${progressPercentage}%`;
+            
+            // Update step indicators
+            stepElements.forEach((step, index) => {
+                if (index + 1 === currentStep) {
+                    step.classList.add('active');
+                } else {
+                    step.classList.remove('active');
+                }
+            });
+            
+            // Show current step content
+            stepContents.forEach((content, index) => {
+                if (index + 1 === currentStep) {
+                    content.classList.add('active');
+                } else {
+                    content.classList.remove('active');
+                }
+            });
+            
+            window.scrollTo(0, 0);
+        }
+        
+        // Navigate to a specific step
+        function goToStep(stepNumber) {
+            if (stepNumber >= 1 && stepNumber <= totalSteps + 2) {
+                currentStep = stepNumber;
+                updateProgress();
+            }
+        }
+        
+        // Setup event listeners
+        function setupEventListeners() {
+            // Navigation buttons
+            document.getElementById('toStep2').addEventListener('click', () => goToStep(2));
+            document.getElementById('toStep1').addEventListener('click', () => goToStep(1));
+            document.getElementById('toStep3').addEventListener('click', () => goToStep(3));
+            document.getElementById('toStep2Back').addEventListener('click', () => goToStep(2));
+            document.getElementById('toStep4').addEventListener('click', () => goToStep(4));
+            document.getElementById('toStep3Back').addEventListener('click', () => goToStep(3));
+            document.getElementById('toStep5').addEventListener('click', () => goToStep(5));
+            document.getElementById('toStep4Back').addEventListener('click', () => goToStep(4));
+            document.getElementById('toStep6').addEventListener('click', () => goToStep(6));
+            document.getElementById('toStep5Back').addEventListener('click', () => goToStep(5));
+            document.getElementById('toStep7').addEventListener('click', () => goToStep(7));
+            document.getElementById('toStep6Back').addEventListener('click', () => goToStep(6));
+            document.getElementById('toStep8').addEventListener('click', () => goToStep(8));
+            document.getElementById('toStep7Back').addEventListener('click', () => goToStep(7));
+            document.getElementById('toStep9').addEventListener('click', () => goToStep(9));
+            document.getElementById('toStep8Back').addEventListener('click', () => goToStep(8));
+            document.getElementById('toSummary').addEventListener('click', () => {
+                goToStep(10); // Summary is step 10
+                updateSummary();
+            });
+            
+            // Training type visibility
+            document.querySelectorAll('input[name="hasTraining"]').forEach(radio => {
+                radio.addEventListener('change', function() {
+                    document.getElementById('trainingTypeGroup').style.display = 
+                        this.value === 'yes' ? 'block' : 'none';
+                });
+            });
+            
+            // Employment details visibility
+            document.querySelectorAll('input[name="isEmployed"]').forEach(radio => {
+                radio.addEventListener('change', function() {
+                    const isEmployed = this.value === 'yes';
+                    document.getElementById('employmentDetails').style.display = 
+                        isEmployed ? 'block' : 'none';
+                    document.getElementById('unemploymentDetails').style.display = 
+                        isEmployed ? 'none' : 'block';
+                });
+            });
+            
+            // Verify ID button - UPDATED FOR BOT INTEGRATION
+            document.getElementById('verifyBtn').addEventListener('click', async () => {
+                const idNumber = document.getElementById('idNumber').value;
+                if (idNumber.length === 13 && !isNaN(idNumber)) {
+                    // Show loading state
+                    const verifyBtn = document.getElementById('verifyBtn');
+                    verifyBtn.disabled = true;
+                    verifyBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verifying with IEC...';
+                    
+                    try {
+                        // Call the bot API
+                        const response = await fetch('/verify_voter', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ id_number: idNumber })
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (data.success) {
+                            // Populate the form with real data from IEC
+                            document.getElementById('verificationResults').style.display = 'block';
+                            document.getElementById('fullName').value = data.fullName;
+                            document.getElementById('age').value = data.age;
+                            document.getElementById('ward').value = data.ward;
+                            document.getElementById('votingDistrict').value = data.votingDistrict;
+                            document.getElementById('votingStation').value = data.votingStation;
+                            
+                            showNotification('ID successfully verified with IEC - Real Data');
+                        } else {
+                            showNotification('Verification failed: ' + (data.error || 'Unknown error'));
+                            // Fallback to simulated data
+                            fallbackToSimulatedData(idNumber);
+                        }
+                        
+                    } catch (error) {
+                        console.error('Verification error:', error);
+                        showNotification('Connection error. Using simulated data.');
+                        // Fallback to simulated data
+                        fallbackToSimulatedData(idNumber);
+                    } finally {
+                        // Reset button state
+                        verifyBtn.disabled = false;
+                        verifyBtn.textContent = 'Verify with IEC';
+                    }
+                } else {
+                    showNotification('Please enter a valid 13-digit ID number');
+                }
+            });
+            
+            // Consent checkbox
+            document.getElementById('consentCheck').addEventListener('change', function() {
+                document.getElementById('submitBtn').disabled = !this.checked;
+            });
+            
+            // Submit button
+            document.getElementById('submitBtn').addEventListener('click', () => {
+                // Show confirmation screen
+                goToStep(11); // Confirmation is step 11
+                
+                // Save data (in a real app, this would sync with a server)
+                saveDataLocally();
+            });
+            
+            // Download profile button
+            document.getElementById('downloadProfile').addEventListener('click', () => {
+                showNotification('Profile download started');
+                // In a real app, this would generate a PDF
+            });
+            
+            // New entry button
+            document.getElementById('newEntry').addEventListener('click', () => {
+                // Reset the form
+                currentStep = 1;
+                document.querySelectorAll('input, select, textarea').forEach(element => {
+                    if (element.type !== 'button') {
+                        element.value = '';
+                        if (element.type === 'radio' || element.type === 'checkbox') {
+                            element.checked = false;
+                        }
+                    }
+                });
+                // Reset first radio buttons
+                document.querySelector('input[name="changeStation"]').checked = true;
+                document.querySelector('input[name="hasMatric"][value="no"]').checked = true;
+                document.querySelector('input[name="hasTraining"][value="no"]').checked = true;
+                document.querySelector('input[name="isEmployed"][value="no"]').checked = true;
+                document.querySelector('input[name="lookingForWork"][value="no"]').checked = true;
+                document.querySelector('input[name="elderlyDependents"][value="no"]').checked = true;
+                document.querySelector('input[name="votedLastElection"][value="first"]').checked = true;
+                document.querySelector('input[name="needHelp"][value="no"]').checked = true;
+                document.querySelector('input[name="volunteer"][value="no"]').checked = true;
+                document.querySelector('input[name="useWhatsapp"][value="no"]').checked = true;
+                document.querySelector('input[name="hasInternet"][value="no"]').checked = true;
+                document.querySelector('input[name="notifications"][value="no"]').checked = true;
+                document.getElementById('trainingTypeGroup').style.display = 'none';
+                document.getElementById('employmentDetails').style.display = 'none';
+                document.getElementById('verificationResults').style.display = 'none';
+                
+                updateProgress();
+            });
+        }
+        
+        // Fallback function for simulated data
+        function fallbackToSimulatedData(idNumber) {
+            document.getElementById('verificationResults').style.display = 'block';
+            document.getElementById('fullName').value = 'Simulated Voter Name';
+            document.getElementById('age').value = 'Based on ID: ' + (2025 - parseInt(idNumber.substring(0, 2)) > 1900 ? 
+                2025 - (1900 + parseInt(idNumber.substring(0, 2))) : 
+                2025 - (2000 + parseInt(idNumber.substring(0, 2))));
+            document.getElementById('ward').value = 'Ward ' + (parseInt(idNumber.substring(7, 8)) + 1);
+            document.getElementById('votingDistrict').value = 'District ' + (parseInt(idNumber.substring(9, 10)) + 1);
+            document.getElementById('votingStation').value = 'Station ' + (parseInt(idNumber.substring(10, 12)) + 1);
+        }
+        
+        // Save data locally (simulated)
+        function saveDataLocally() {
+            const formData = {
+                idNumber: document.getElementById('idNumber').value,
+                fullName: document.getElementById('fullName').value,
+                timestamp: new Date().toISOString()
+            };
+            
+            // In a real app, this would use IndexedDB or similar
+            localStorage.setItem('voterData', JSON.stringify(formData));
+            console.log('Data saved locally:', formData);
+            
+            // If online, try to sync with server
+            if (navigator.onLine) {
+                syncWithServer(formData);
+            } else {
+                // Store for later sync
+                const pendingSync = JSON.parse(localStorage.getItem('pendingSync') || '[]');
+                pendingSync.push(formData);
+                localStorage.setItem('pendingSync', JSON.stringify(pendingSync));
+            }
+        }
+        
+        // Sync with server (simulated)
+        function syncWithServer(data) {
+            console.log('Syncing data with server:', data);
+            // In a real app, this would be a fetch request to your API
+            showNotification('Data synced with server');
+        }
+        
+        // Update summary with entered data
+        function updateSummary() {
+            document.getElementById('summary-id').textContent = document.getElementById('idNumber').value;
+            document.getElementById('summary-name').textContent = document.getElementById('fullName').value;
+            document.getElementById('summary-station').textContent = document.getElementById('votingStation').value;
+            
+            const gender = document.querySelector('input[name="gender"]:checked');
+            const maritalStatus = document.getElementById('maritalStatus').value;
+            document.getElementById('summary-demographics').textContent = 
+                `${gender ? gender.value : 'Not specified'}, ${maritalStatus || 'Not specified'}`;
+            
+            const householdSize = document.getElementById('householdSize').value;
+            const housingType = document.getElementById('housingType').value;
+            document.getElementById('summary-household').textContent = 
+                `${householdSize} people, ${housingType || 'Not specified'}`;
+            
+            const priority = document.getElementById('priority').value;
+            document.getElementById('summary-priority').textContent = priority || 'Not specified';
+        }
+        
+        // Initialize the app when DOM is loaded
+        document.addEventListener('DOMContentLoaded', initApp);
+    </script>
+</body>
+</html>
