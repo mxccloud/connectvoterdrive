@@ -7,6 +7,7 @@
     <meta name="description" content="Secure voter data capture application">
     <meta name="theme-color" content="#007749">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         :root {
             --anc-black: #000000;
@@ -77,6 +78,24 @@
         .logo i {
             font-size: 1.5rem;
             color: var(--anc-gold);
+        }
+        
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .user-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: var(--anc-gold);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: var(--anc-black);
         }
         
         .progress-container {
@@ -234,6 +253,14 @@
             background-color: #e6a50f;
         }
         
+        .btn-danger {
+            background-color: #dc3545;
+        }
+        
+        .btn-danger:hover {
+            background-color: #c82333;
+        }
+        
         .navigation {
             display: flex;
             justify-content: space-between;
@@ -287,6 +314,10 @@
             z-index: 1000;
         }
         
+        .notification.error {
+            background: #dc3545;
+        }
+        
         .offline-warning {
             background-color: var(--anc-gold);
             color: var(--anc-black);
@@ -304,6 +335,59 @@
             opacity: 0.7;
             pointer-events: none;
         }
+        
+        small {
+            color: var(--anc-gray);
+            font-size: 0.8rem;
+        }
+        
+        .login-container {
+            max-width: 400px;
+            margin: 100px auto;
+            padding: 20px;
+        }
+        
+        .login-card {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+        
+        .login-logo {
+            font-size: 3rem;
+            color: var(--anc-green);
+            margin-bottom: 20px;
+        }
+        
+        .login-form {
+            text-align: left;
+        }
+        
+        .logout-btn {
+            background: transparent;
+            border: 1px solid rgba(255,255,255,0.3);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .logout-btn:hover {
+            background: rgba(255,255,255,0.1);
+        }
+        
+        .error-message {
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 12px;
+            border-radius: 6px;
+            border-left: 4px solid #dc3545;
+            margin: 15px 0;
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -313,579 +397,650 @@
         <i class="fas fa-wifi"></i> You are currently offline. Data will be synced when connection is restored.
     </div>
     
-    <header>
-        <div class="app-bar">
-            <div class="logo">
+    <!-- Login Screen -->
+    <div id="loginScreen" class="login-container">
+        <div class="login-card">
+            <div class="login-logo">
                 <i class="fas fa-vote-yea"></i>
-                <span>ConnectVote</span>
             </div>
-            <div id="connectionStatus"></div>
+            <h2>ConnectVote Admin</h2>
+            <p>Please sign in to continue</p>
+            
+            <div class="login-form">
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" placeholder="Enter your email">
+                </div>
+                
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" placeholder="Enter your password">
+                </div>
+                
+                <button class="btn btn-gold" id="loginBtn" style="width: 100%;">
+                    <i class="fas fa-sign-in-alt"></i> Sign In
+                </button>
+                
+                <div id="loginError" style="color: #dc3545; margin-top: 15px; display: none;">
+                    <i class="fas fa-exclamation-triangle"></i> Invalid login credentials
+                </div>
+            </div>
         </div>
-        
-        <div class="progress-container">
-            <div class="progress-bar" id="progressBar"></div>
-        </div>
-        
-        <div class="step-indicator">
-            <div class="step active" data-step="1">Verification</div>
-            <div class="step" data-step="2">Demographics</div>
-            <div class="step" data-step="3">Education</div>
-            <div class="step" data-step="4">Employment</div>
-            <div class="step" data-step="5">Social</div>
-            <div class="step" data-step="6">Community</div>
-            <div class="step" data-step="7">Political</div>
-            <div class="step" data-step="8">Communication</div>
-            <div class="step" data-step="9">Aspirations</div>
-        </div>
-    </header>
+    </div>
     
-    <div class="container">
-        <!-- Step 1: Verification -->
-        <div class="step-content active" id="step1">
-            <div class="card">
-                <h2><i class="fas fa-id-card"></i> Voter Verification</h2>
-                <div class="form-group">
-                    <label for="idNumber">ID Number</label>
-                    <input type="text" id="idNumber" placeholder="Enter your South African ID number">
+    <!-- Main App (Hidden until authenticated) -->
+    <div id="mainApp" style="display: none;">
+        <header>
+            <div class="app-bar">
+                <div class="logo">
+                    <i class="fas fa-vote-yea"></i>
+                    <span>ConnectVote</span>
                 </div>
-                <button class="btn" id="verifyBtn">Verify with IEC</button>
-            </div>
-            
-            <div class="card" id="verificationResults" style="display: none;">
-                <h2>Verification Results</h2>
-                <div class="form-group">
-                    <label>Voting Station</label>
-                    <input type="text" id="fullName" readonly>
-                </div>
-                <div class="form-group">
-                    <label>Age</label>
-                    <input type="text" id="age" readonly>
-                </div>
-                <div class="form-group">
-                    <label>Ward</label>
-                    <input type="text" id="ward" readonly>
-                </div>
-                <div class="form-group">
-                    <label>Voting District</label>
-                    <input type="text" id="votingDistrict" readonly>
-                </div>
-                <div class="form-group">
-                    <label>Current Voting Station</label>
-                    <input type="text" id="votingStation" readonly>
-                </div>
-            
-            <div class="navigation">
-                <div></div>
-                <button class="btn btn-gold" id="toStep2">Continue</button>
-            </div>
-        </div>
-        
-        <!-- Step 2: Demographics -->
-        <div class="step-content" id="step2">
-            <div class="card">
-                <h2><i class="fas fa-users"></i> Demographics</h2>
-                
-                <div class="form-group">
-                    <label>Gender</label>
-                    <div class="radio-group">
-                        <label class="radio-option">
-                            <input type="radio" name="gender" value="male"> Male
-                        </label>
-                        <label class="radio-option">
-                            <input type="radio" name="gender" value="female"> Female
-                        </label>
-                        <label class="radio-option">
-                            <input type="radio" name="gender" value="other"> Other
-                        </label>
-                    </div>
-                </div>
-                
-                <div class="form-group">
-                    <label>Marital Status</label>
-                    <select id="maritalStatus">
-                        <option value="">Select marital status</option>
-                        <option value="single">Single</option>
-                        <option value="married">Married</option>
-                        <option value="divorced">Divorced</option>
-                        <option value="widowed">Widowed</option>
-                    </select>
-                </div>
-                
-                <div class="form-group">
-                    <label for="householdSize">Household Size</label>
-                    <input type="number" id="householdSize" min="1" max="20" value="1">
-                </div>
-                
-                <div class="form-group">
-                    <label>Type of Housing</label>
-                    <select id="housingType">
-                        <option value="">Select housing type</option>
-                        <option value="rdp">RDP</option>
-                        <option value="own">Own house (bond)</option>
-                        <option value="renting">Renting flat/room</option>
-                        <option value="informal">Informal shack</option>
-                        <option value="backyard">Backyard room</option>
-                        <option value="other">Other</option>
-                    </select>
-                </div>
-            </div>
-            
-            <div class="navigation">
-                <button class="btn btn-secondary" id="toStep1">Back</button>
-                <button class="btn btn-gold" id="toStep3">Continue</button>
-            </div>
-        </div>
-        
-        <!-- Step 3: Education -->
-        <div class="step-content" id="step3">
-            <div class="card">
-                <h2><i class="fas fa-graduation-cap"></i> Education</h2>
-                
-                <div class="form-group">
-                    <label>Do you have a matric certificate?</label>
-                    <div class="radio-group">
-                        <label class="radio-option">
-                            <input type="radio" name="hasMatric" value="yes"> Yes
-                        </label>
-                        <label class="radio-option">
-                            <input type="radio" name="hasMatric" value="no" checked> No
-                        </label>
-                    </div>
-                </div>
-                
-                <div class="form-group">
-                    <label>Highest level of education achieved:</label>
-                    <select id="educationLevel">
-                        <option value="">Select education level</option>
-                        <option value="none">None</option>
-                        <option value="grade1-11">Grade 1-11</option>
-                        <option value="matric">Matric</option>
-                        <option value="diploma">Diploma</option>
-                        <option value="degree">Degree</option>
-                        <option value="postgraduate">Postgraduate</option>
-                        <option value="other">Other</option>
-                    </select>
-                </div>
-                
-                <div class="form-group">
-                    <label>Have you completed any skills or vocational training?</label>
-                    <div class="radio-group">
-                        <label class="radio-option">
-                            <input type="radio" name="hasTraining" value="yes"> Yes
-                        </label>
-                        <label class="radio-option">
-                            <input type="radio" name="hasTraining" value="no" checked> No
-                        </label>
-                    </div>
-                </div>
-                
-                <div class="form-group" id="trainingTypeGroup" style="display: none;">
-                    <label>Type of training:</label>
-                    <select id="trainingType">
-                        <option value="">Select training type</option>
-                        <option value="plumbing">Plumbing</option>
-                        <option value="electrical">Electrical</option>
-                        <option value="ict">ICT</option>
-                        <option value="caregiving">Caregiving</option>
-                        <option value="construction">Construction</option>
-                        <option value="hospitality">Hospitality</option>
-                        <option value="other">Other</option>
-                    </select>
-                </div>
-            </div>
-            
-            <div class="navigation">
-                <button class="btn btn-secondary" id="toStep2Back">Back</button>
-                <button class="btn btn-gold" id="toStep4">Continue</button>
-            </div>
-        </div>
-        
-        <!-- Step 4: Employment -->
-        <div class="step-content" id="step4">
-            <div class="card">
-                <h2><i class="fas fa-briefcase"></i> Employment</h2>
-                
-                <div class="form-group">
-                    <label>Are you currently employed?</label>
-                    <div class="radio-group">
-                        <label class="radio-option">
-                            <input type="radio" name="isEmployed" value="yes"> Yes
-                        </label>
-                        <label class="radio-option">
-                            <input type="radio" name="isEmployed" value="no" checked> No
-                        </label>
-                    </div>
-                </div>
-                
-                <div class="form-group" id="employmentDetails" style="display: none;">
-                    <label>Type of work:</label>
-                    <select id="employmentType">
-                        <option value="">Select employment type</option>
-                        <option value="formal">Formal</option>
-                        <option value="informal">Informal</option>
-                        <option value="part-time">Part-time</option>
-                        <option value="self-employed">Self-employed</option>
-                        <option value="contract">Contract</option>
-                        <option value="government">Government</option>
-                        <option value="private">Private sector</option>
-                    </select>
-                    
-                    <div class="form-group">
-                        <label>Main occupation:</label>
-                        <select id="occupation">
-                            <option value="">Select occupation</option>
-                            <option value="general">General worker</option>
-                            <option value="cleaner">Cleaner</option>
-                            <option value="driver">Driver</option>
-                            <option value="sales">Sales</option>
-                            <option value="artisan">Artisan</option>
-                            <option value="admin">Admin</option>
-                            <option value="security">Security</option>
-                            <option value="teacher">Teacher</option>
-                            <option value="healthcare">Healthcare</option>
-                            <option value="student">Student</option>
-                            <option value="other">Other</option>
-                        </select>
-                    </div>
-                </div>
-                
-                <div class="form-group" id="unemploymentDetails">
-                    <label>Are you actively looking for work?</label>
-                    <div class="radio-group">
-                        <label class="radio-option">
-                            <input type="radio" name="lookingForWork" value="yes"> Yes
-                        </label>
-                        <label class="radio-option">
-                            <input type="radio" name="lookingForWork" value="no" checked> No
-                        </label>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label>What work experience do you have?</label>
-                        <select id="workExperience">
-                            <option value="">Select experience</option>
-                            <option value="general">General worker</option>
-                            <option value="cleaner">Cleaner</option>
-                            <option value="driver">Driver</option>
-                            <option value="sales">Sales</option>
-                            <option value="artisan">Artisan</option>
-                            <option value="admin">Admin</option>
-                            <option value="security">Security</option>
-                            <option value="other">Other</option>
-                        </select>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="navigation">
-                <button class="btn btn-secondary" id="toStep3Back">Back</button>
-                <button class="btn btn-gold" id="toStep5">Continue</button>
-            </div>
-        </div>
-        
-        <!-- Step 5: Social -->
-        <div class="step-content" id="step5">
-            <div class="card">
-                <h2><i class="fas fa-hand-holding-heart"></i> Social & Family</h2>
-                
-                <div class="form-group">
-                    <label>Do you receive a social grant?</label>
-                    <select id="socialGrant">
-                        <option value="">Select grant type</option>
-                        <option value="child">Child Support</option>
-                        <option value="disability">Disability</option>
-                        <option value="oldage">Old Age</option>
-                        <option value="nsfas">NSFAS</option>
-                        <option value="none">None</option>
-                    </select>
-                </div>
-                
-                <div class="form-group">
-                    <label>How many children under 18 are you supporting?</label>
-                    <input type="number" id="childrenUnder18" min="0" max="20" value="0">
-                </div>
-                
-                <div class="form-group">
-                    <label>How many children in your household are of voting age (18+)?</label>
-                    <input type="number" id="childrenOver18" min="0" max="20" value="0">
-                </div>
-                
-                <div class="form-group">
-                    <label>Do you live with elderly dependents?</label>
-                    <div class="radio-group">
-                        <label class="radio-option">
-                            <input type="radio" name="elderlyDependents" value="yes"> Yes
-                        </label>
-                        <label class="radio-option">
-                            <input type="radio" name="elderlyDependents" value="no" checked> No
-                        </label>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="navigation">
-                <button class="btn btn-secondary" id="toStep4Back">Back</button>
-                <button class="btn btn-gold" id="toStep6">Continue</button>
-            </div>
-        </div>
-        
-        <!-- Step 6: Community -->
-        <div class="step-content" id="step6">
-            <div class="card">
-                <h2><i class="fas fa-users"></i> Community & Service Delivery</h2>
-                
-                <div class="form-group">
-                    <label>What is your biggest challenge in your community?</label>
-                    <select id="communityChallenge">
-                        <option value="">Select challenge</option>
-                        <option value="water">Water & Sanitation</option>
-                        <option value="electricity">Energy / Electricity</option>
-                        <option value="waste">Waste Management</option>
-                        <option value="roads">Roads & Transport</option>
-                        <option value="safety">Community Safety & Security</option>
-                        <option value="services">Community Services</option>
-                        <option value="housing">Housing & Human Settlements</option>
-                        <option value="health">Health Services</option>
-                        <option value="other">Other</option>
-                    </select>
-                </div>
-                
-                <div class="form-group">
-                    <label>Please describe your problem in detail:</label>
-                    <textarea id="problemDescription" rows="4" placeholder="Describe the challenge you're facing"></textarea>
-                </div>
-            </div>
-            
-            <div class="navigation">
-                <button class="btn btn-secondary" id="toStep5Back">Back</button>
-                <button class="btn btn-gold" id="toStep7">Continue</button>
-            </div>
-        </div>
-        
-        <!-- Step 7: Political -->
-        <div class="step-content" id="step7">
-            <div class="card">
-                <h2><i class="fas fa-landmark"></i> Political Engagement</h2>
-                
-                <div class="form-group">
-                    <label>Did you vote in the last election?</label>
-                    <div class="radio-group">
-                        <label class="radio-option">
-                            <input type="radio" name="votedLastElection" value="yes"> Yes
-                        </label>
-                        <label class="radio-option">
-                            <input type="radio" name="votedLastElection" value="no"> No
-                        </label>
-                        <label class="radio-option">
-                            <input type="radio" name="votedLastElection" value="first" checked> First-time voter
-                        </label>
-                    </div>
-                </div>
-                
-                <div class="form-group">
-                    <label>Do you need help registering or checking your ID for voting?</label>
-                    <div class="radio-group">
-                        <label class="radio-option">
-                            <input type="radio" name="needHelp" value="yes"> Yes
-                        </label>
-                        <label class="radio-option">
-                            <input type="radio" name="needHelp" value="no" checked> No
-                        </label>
-                    </div>
-                </div>
-                
-                <div class="form-group">
-                    <label>Would you like to volunteer in community programmes or campaigns?</label>
-                    <div class="radio-group">
-                        <label class="radio-option">
-                            <input type="radio" name="volunteer" value="yes"> Yes
-                        </label>
-                        <label class="radio-option">
-                            <input type="radio" name="volunteer" value="no" checked> No
-                        </label>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="navigation">
-                <button class="btn btn-secondary" id="toStep6Back">Back</button>
-                <button class="btn btn-gold" id="toStep8">Continue</button>
-            </div>
-        </div>
-        
-        <!-- Step 8: Communication -->
-        <div class="step-content" id="step8">
-            <div class="card">
-                <h2><i class="fas fa-comments"></i> Communication Preferences</h2>
-                
-                <div class="form-group">
-                    <label>Do you use WhatsApp?</label>
-                    <div class="radio-group">
-                        <label class="radio-option">
-                            <input type="radio" name="useWhatsapp" value="yes"> Yes
-                        </label>
-                        <label class="radio-option">
-                            <input type="radio" name="useWhatsapp" value="no" checked> No
-                        </label>
-                    </div>
-                </div>
-                
-                <div class="form-group">
-                    <label>Do you have access to the internet?</label>
-                    <div class="radio-group">
-                        <label class="radio-option">
-                            <input type="radio" name="hasInternet" value="yes"> Yes
-                        </label>
-                        <label class="radio-option">
-                            <input type="radio" name="hasInternet" value="no" checked> No
-                        </label>
-                    </div>
-                </div>
-                
-                <div class="form-group">
-                    <label>Preferred communication method:</label>
-                    <select id="communicationMethod">
-                        <option value="">Select method</option>
-                        <option value="sms">SMS</option>
-                        <option value="whatsapp">WhatsApp</option>
-                        <option value="phone">Phone Call</option>
-                        <option value="email">Email</option>
-                        <option value="door">Door-to-door visit</option>
-                    </select>
-                </div>
-            </div>
-            
-            <div class="navigation">
-                <button class="btn btn-secondary" id="toStep7Back">Back</button>
-                <button class="btn btn-gold" id="toStep9">Continue</button>
-            </div>
-        </div>
-        
-        <!-- Step 9: Personal Aspirations -->
-        <div class="step-content" id="step9">
-            <div class="card">
-                <h2><i class="fas fa-star"></i> Personal Aspirations</h2>
-                
-                <div class="form-group">
-                    <label>What is your number one personal priority right now?</label>
-                    <select id="priority">
-                        <option value="">Select your priority</option>
-                        <option value="job">Job</option>
-                        <option value="education">Education</option>
-                        <option value="business">Business support</option>
-                        <option value="housing">Housing</option>
-                        <option value="safety">Safety</option>
-                        <option value="health">Health</option>
-                        <option value="other">Other</option>
-                    </select>
-                </div>
-                
-                <div class="form-group">
-                    <label>Would you like to receive notifications about opportunities?</label>
-                    <div class="radio-group">
-                        <label class="radio-option">
-                            <input type="radio" name="notifications" value="yes"> Yes
-                        </label>
-                        <label class="radio-option">
-                            <input type="radio" name="notifications" value="no" checked> No
-                        </label>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Review & Submit button is correctly placed at the end of Step 9 (Aspirations) -->
-            <div class="navigation">
-                <button class="btn btn-secondary" id="toStep8Back">Back</button>
-                <button class="btn btn-gold" id="toSummary">Review & Submit</button>
-            </div>
-        </div>
-        
-        <!-- Summary Step -->
-        <div class="step-content" id="summary">
-            <div class="card">
-                <h2><i class="fas fa-check-circle"></i> Review Your Information</h2>
-                <p>Please review all your information before submitting.</p>
-                
-                <div class="summary-card">
-                    <h3>Verification Details</h3>
-                    <div class="summary-item">
-                        <div class="summary-label">ID Number</div>
-                        <div id="summary-id"></div>
-                    </div>
-                    <div class="summary-item">
-                        <div class="summary-label">Full Name</div>
-                        <div id="summary-name"></div>
-                    </div>
-                    <div class="summary-item">
-                        <div class="summary-label">Voting Station</div>
-                        <div id="summary-station"></div>
-                    </div>
-                </div>
-                
-                <div class="summary-card">
-                    <h3>Demographics</h3>
-                    <div class="summary-item">
-                        <div class="summary-label">Gender & Marital Status</div>
-                        <div id="summary-demographics"></div>
-                    </div>
-                    <div class="summary-item">
-                        <div class="summary-label">Household Size & Housing</div>
-                        <div id="summary-household"></div>
-                    </div>
-                </div>
-                
-                <div class="summary-card">
-                    <h3>Personal Priorities</h3>
-                    <div class="summary-item">
-                        <div class="summary-label">Main Priority</div>
-                        <div id="summary-priority"></div>
-                    </div>
-                </div>
-                
-                <div class="form-group">
-                    <label class="checkbox-option">
-                        <input type="checkbox" id="consentCheck">
-                        I confirm that the information provided is accurate and consent to its use for improving service delivery.
-                    </label>
-                </div>
-                
-                <button class="btn btn-gold" id="submitBtn" disabled>Submit Information</button>
-            </div>
-        </div>
-        
-        <!-- Confirmation Screen -->
-        <div class="step-content" id="confirmation">
-            <div class="card" style="text-align: center;">
-                <div style="font-size: 4rem; color: var(--anc-green);">
-                    <i class="fas fa-check-circle"></i>
-                </div>
-                <h2>Thank You!</h2>
-                <p>Your voter profile has been successfully submitted.</p>
-                <p>Your information will help us better understand community needs and improve service delivery.</p>
-                
-                <div style="margin: 30px 0;">
-                    <button class="btn" id="downloadProfile">
-                        <i class="fas fa-download"></i> Download Profile
+                <div class="user-info">
+                    <span id="userEmail"></span>
+                    <div class="user-avatar" id="userAvatar"></div>
+                    <button class="logout-btn" id="logoutBtn">
+                        <i class="fas fa-sign-out-alt"></i> Logout
                     </button>
                 </div>
+            </div>
+            
+            <div class="progress-container">
+                <div class="progress-bar" id="progressBar"></div>
+            </div>
+            
+            <div class="step-indicator">
+                <div class="step active" data-step="1">Verification</div>
+                <div class="step" data-step="2">Demographics</div>
+                <div class="step" data-step="3">Education</div>
+                <div class="step" data-step="4">Employment</div>
+                <div class="step" data-step="5">Social</div>
+                <div class="step" data-step="6">Community</div>
+                <div class="step" data-step="7">Political</div>
+                <div class="step" data-step="8">Communication</div>
+                <div class="step" data-step="9">Aspirations</div>
+            </div>
+        </header>
+        
+        <div class="container">
+            <!-- Step 1: Verification -->
+            <div class="step-content active" id="step1">
+                <div class="card">
+                    <h2><i class="fas fa-id-card"></i> Voter Verification</h2>
+                    <div class="form-group">
+                        <label for="idNumber">ID Number</label>
+                        <input type="text" id="idNumber" placeholder="Enter your South African ID number">
+                    </div>
+                    <button class="btn" id="verifyBtn">Verify with IEC</button>
+                </div>
                 
-                <button class="btn btn-secondary" id="newEntry">
-                    <i class="fas fa-plus"></i> Start New Entry
-                </button>
+                <div class="error-message" id="voterNotFoundError">
+                    <i class="fas fa-exclamation-triangle"></i> Voter not found on IEC database. Please check the ID number and try again.
+                </div>
+                
+                <div class="card" id="verificationResults" style="display: none;">
+                    <h2>Verification Results</h2>
+                    <div class="form-group">
+                        <label>Full Name</label>
+                        <input type="text" id="fullName" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label>Age</label>
+                        <input type="text" id="age" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label>Ward</label>
+                        <input type="text" id="ward" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label>Voting District</label>
+                        <input type="text" id="votingDistrict" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label>Current Voting Station</label>
+                        <input type="text" id="votingStation" readonly>
+                    </div>
+                </div>
+                
+                <div class="navigation">
+                    <div></div>
+                    <button class="btn btn-gold" id="toStep2">Continue</button>
+                </div>
+            </div>
+            
+            <!-- Step 2: Demographics -->
+            <div class="step-content" id="step2">
+                <div class="card">
+                    <h2><i class="fas fa-users"></i> Demographics</h2>
+                    
+                    <div class="form-group">
+                        <label>Gender</label>
+                        <div class="radio-group">
+                            <label class="radio-option">
+                                <input type="radio" name="gender" value="male"> Male
+                            </label>
+                            <label class="radio-option">
+                                <input type="radio" name="gender" value="female"> Female
+                            </label>
+                            <label class="radio-option">
+                                <input type="radio" name="gender" value="other"> Other
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Marital Status</label>
+                        <select id="maritalStatus">
+                            <option value="">Select marital status</option>
+                            <option value="single">Single</option>
+                            <option value="married">Married</option>
+                            <option value="divorced">Divorced</option>
+                            <option value="widowed">Widowed</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="householdSize">Household Size</label>
+                        <input type="number" id="householdSize" min="1" max="20" value="1">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Type of Housing</label>
+                        <select id="housingType">
+                            <option value="">Select housing type</option>
+                            <option value="rdp">RDP</option>
+                            <option value="own">Own house (bond)</option>
+                            <option value="renting">Renting flat/room</option>
+                            <option value="informal">Informal shack</option>
+                            <option value="backyard">Backyard room</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="navigation">
+                    <button class="btn btn-secondary" id="toStep1">Back</button>
+                    <button class="btn btn-gold" id="toStep3">Continue</button>
+                </div>
+            </div>
+            
+            <!-- Step 3: Education -->
+            <div class="step-content" id="step3">
+                <div class="card">
+                    <h2><i class="fas fa-graduation-cap"></i> Education</h2>
+                    
+                    <div class="form-group">
+                        <label>Do you have a matric certificate?</label>
+                        <div class="radio-group">
+                            <label class="radio-option">
+                                <input type="radio" name="hasMatric" value="yes"> Yes
+                            </label>
+                            <label class="radio-option">
+                                <input type="radio" name="hasMatric" value="no" checked> No
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Highest level of education achieved:</label>
+                        <select id="educationLevel">
+                            <option value="">Select education level</option>
+                            <option value="none">None</option>
+                            <option value="grade1-11">Grade 1-11</option>
+                            <option value="matric">Matric</option>
+                            <option value="diploma">Diploma</option>
+                            <option value="degree">Degree</option>
+                            <option value="postgraduate">Postgraduate</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Have you completed any skills or vocational training?</label>
+                        <div class="radio-group">
+                            <label class="radio-option">
+                                <input type="radio" name="hasTraining" value="yes"> Yes
+                            </label>
+                            <label class="radio-option">
+                                <input type="radio" name="hasTraining" value="no" checked> No
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group" id="trainingTypeGroup" style="display: none;">
+                        <label>Type of training:</label>
+                        <select id="trainingType">
+                            <option value="">Select training type</option>
+                            <option value="plumbing">Plumbing</option>
+                            <option value="electrical">Electrical</option>
+                            <option value="ict">ICT</option>
+                            <option value="caregiving">Caregiving</option>
+                            <option value="construction">Construction</option>
+                            <option value="hospitality">Hospitality</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="navigation">
+                    <button class="btn btn-secondary" id="toStep2Back">Back</button>
+                    <button class="btn btn-gold" id="toStep4">Continue</button>
+                </div>
+            </div>
+            
+            <!-- Step 4: Employment -->
+            <div class="step-content" id="step4">
+                <div class="card">
+                    <h2><i class="fas fa-briefcase"></i> Employment</h2>
+                    
+                    <div class="form-group">
+                        <label>Are you currently employed?</label>
+                        <div class="radio-group">
+                            <label class="radio-option">
+                                <input type="radio" name="isEmployed" value="yes"> Yes
+                            </label>
+                            <label class="radio-option">
+                                <input type="radio" name="isEmployed" value="no" checked> No
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group" id="employmentDetails" style="display: none;">
+                        <label>Type of work:</label>
+                        <select id="employmentType">
+                            <option value="">Select employment type</option>
+                            <option value="formal">Formal</option>
+                            <option value="informal">Informal</option>
+                            <option value="part-time">Part-time</option>
+                            <option value="self-employed">Self-employed</option>
+                            <option value="contract">Contract</option>
+                            <option value="government">Government</option>
+                            <option value="private">Private sector</option>
+                        </select>
+                        
+                        <div class="form-group">
+                            <label>Main occupation:</label>
+                            <select id="occupation">
+                                <option value="">Select occupation</option>
+                                <option value="general">General worker</option>
+                                <option value="cleaner">Cleaner</option>
+                                <option value="driver">Driver</option>
+                                <option value="sales">Sales</option>
+                                <option value="artisan">Artisan</option>
+                                <option value="admin">Admin</option>
+                                <option value="security">Security</option>
+                                <option value="teacher">Teacher</option>
+                                <option value="healthcare">Healthcare</option>
+                                <option value="student">Student</option>
+                                <option value="other">Other</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group" id="unemploymentDetails">
+                        <label>Are you actively looking for work?</label>
+                        <div class="radio-group">
+                            <label class="radio-option">
+                                <input type="radio" name="lookingForWork" value="yes"> Yes
+                            </label>
+                            <label class="radio-option">
+                                <input type="radio" name="lookingForWork" value="no" checked> No
+                            </label>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>What work experience do you have?</label>
+                            <select id="workExperience">
+                                <option value="">Select experience</option>
+                                <option value="general">General worker</option>
+                                <option value="cleaner">Cleaner</option>
+                                <option value="driver">Driver</option>
+                                <option value="sales">Sales</option>
+                                <option value="artisan">Artisan</option>
+                                <option value="admin">Admin</option>
+                                <option value="security">Security</option>
+                                <option value="other">Other</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="navigation">
+                    <button class="btn btn-secondary" id="toStep3Back">Back</button>
+                    <button class="btn btn-gold" id="toStep5">Continue</button>
+                </div>
+            </div>
+            
+            <!-- Step 5: Social -->
+            <div class="step-content" id="step5">
+                <div class="card">
+                    <h2><i class="fas fa-hand-holding-heart"></i> Social & Family</h2>
+                    
+                    <div class="form-group">
+                        <label>Do you receive a social grant?</label>
+                        <select id="socialGrant">
+                            <option value="">Select grant type</option>
+                            <option value="child">Child Support</option>
+                            <option value="disability">Disability</option>
+                            <option value="oldage">Old Age</option>
+                            <option value="nsfas">NSFAS</option>
+                            <option value="none">None</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>How many children under 18 are you supporting?</label>
+                        <input type="number" id="childrenUnder18" min="0" max="20" value="0">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>How many children in your household are of voting age (18+)?</label>
+                        <input type="number" id="childrenOver18" min="0" max="20" value="0">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Do you live with elderly dependents?</label>
+                        <div class="radio-group">
+                            <label class="radio-option">
+                                <input type="radio" name="elderlyDependents" value="yes"> Yes
+                            </label>
+                            <label class="radio-option">
+                                <input type="radio" name="elderlyDependents" value="no" checked> No
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="navigation">
+                    <button class="btn btn-secondary" id="toStep4Back">Back</button>
+                    <button class="btn btn-gold" id="toStep6">Continue</button>
+                </div>
+            </div>
+            
+            <!-- Step 6: Community -->
+            <div class="step-content" id="step6">
+                <div class="card">
+                    <h2><i class="fas fa-users"></i> Community & Service Delivery</h2>
+                    
+                    <div class="form-group">
+                        <label>What is your biggest challenge in your community?</label>
+                        <select id="communityChallenge">
+                            <option value="">Select challenge</option>
+                            <option value="water">Water & Sanitation</option>
+                            <option value="electricity">Energy / Electricity</option>
+                            <option value="waste">Waste Management</option>
+                            <option value="roads">Roads & Transport</option>
+                            <option value="safety">Community Safety & Security</option>
+                            <option value="services">Community Services</option>
+                            <option value="housing">Housing & Human Settlements</option>
+                            <option value="health">Health Services</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Please describe your problem in detail:</label>
+                        <textarea id="problemDescription" rows="4" placeholder="Describe the challenge you're facing"></textarea>
+                    </div>
+                </div>
+                
+                <div class="navigation">
+                    <button class="btn btn-secondary" id="toStep5Back">Back</button>
+                    <button class="btn btn-gold" id="toStep7">Continue</button>
+                </div>
+            </div>
+            
+            <!-- Step 7: Political -->
+            <div class="step-content" id="step7">
+                <div class="card">
+                    <h2><i class="fas fa-landmark"></i> Political Engagement</h2>
+                    
+                    <div class="form-group">
+                        <label>Did you vote in the last election?</label>
+                        <div class="radio-group">
+                            <label class="radio-option">
+                                <input type="radio" name="votedLastElection" value="yes"> Yes
+                            </label>
+                            <label class="radio-option">
+                                <input type="radio" name="votedLastElection" value="no"> No
+                            </label>
+                            <label class="radio-option">
+                                <input type="radio" name="votedLastElection" value="first" checked> First-time voter
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Do you need help registering or checking your ID for voting?</label>
+                        <div class="radio-group">
+                            <label class="radio-option">
+                                <input type="radio" name="needHelp" value="yes"> Yes
+                            </label>
+                            <label class="radio-option">
+                                <input type="radio" name="needHelp" value="no" checked> No
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Would you like to volunteer in community programmes or campaigns?</label>
+                        <div class="radio-group">
+                            <label class="radio-option">
+                                <input type="radio" name="volunteer" value="yes"> Yes
+                            </label>
+                            <label class="radio-option">
+                                <input type="radio" name="volunteer" value="no" checked> No
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="navigation">
+                    <button class="btn btn-secondary" id="toStep6Back">Back</button>
+                    <button class="btn btn-gold" id="toStep8">Continue</button>
+                </div>
+            </div>
+            
+            <!-- Step 8: Communication -->
+            <div class="step-content" id="step8">
+                <div class="card">
+                    <h2><i class="fas fa-comments"></i> Communication Preferences</h2>
+                    
+                    <!-- Phone Number Field -->
+                    <div class="form-group">
+                        <label for="phoneNumber">Phone Number</label>
+                        <input type="tel" id="phoneNumber" placeholder="Enter your phone number (e.g., 071 234 5678)">
+                        <small>We'll use this to contact you based on your preferences</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Do you use WhatsApp?</label>
+                        <div class="radio-group">
+                            <label class="radio-option">
+                                <input type="radio" name="useWhatsapp" value="yes"> Yes
+                            </label>
+                            <label class="radio-option">
+                                <input type="radio" name="useWhatsapp" value="no" checked> No
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Do you have access to the internet?</label>
+                        <div class="radio-group">
+                            <label class="radio-option">
+                                <input type="radio" name="hasInternet" value="yes"> Yes
+                            </label>
+                            <label class="radio-option">
+                                <input type="radio" name="hasInternet" value="no" checked> No
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Preferred communication method:</label>
+                        <select id="communicationMethod">
+                            <option value="">Select method</option>
+                            <option value="sms">SMS</option>
+                            <option value="whatsapp">WhatsApp</option>
+                            <option value="phone">Phone Call</option>
+                            <option value="email">Email</option>
+                            <option value="door">Door-to-door visit</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="navigation">
+                    <button class="btn btn-secondary" id="toStep7Back">Back</button>
+                    <button class="btn btn-gold" id="toStep9">Continue</button>
+                </div>
+            </div>
+            
+            <!-- Step 9: Personal Aspirations -->
+            <div class="step-content" id="step9">
+                <div class="card">
+                    <h2><i class="fas fa-star"></i> Personal Aspirations</h2>
+                    
+                    <div class="form-group">
+                        <label>What is your number one personal priority right now?</label>
+                        <select id="priority">
+                            <option value="">Select your priority</option>
+                            <option value="job">Job</option>
+                            <option value="education">Education</option>
+                            <option value="business">Business support</option>
+                            <option value="housing">Housing</option>
+                            <option value="safety">Safety</option>
+                            <option value="health">Health</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Would you like to receive notifications about opportunities?</label>
+                        <div class="radio-group">
+                            <label class="radio-option">
+                                <input type="radio" name="notifications" value="yes"> Yes
+                            </label>
+                            <label class="radio-option">
+                                <input type="radio" name="notifications" value="no" checked> No
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Review & Submit button is correctly placed at the end of Step 9 (Aspirations) -->
+                <div class="navigation">
+                    <button class="btn btn-secondary" id="toStep8Back">Back</button>
+                    <button class="btn btn-gold" id="toSummary">Review & Submit</button>
+                </div>
+            </div>
+            
+            <!-- Summary Step -->
+            <div class="step-content" id="summary">
+                <div class="card">
+                    <h2><i class="fas fa-check-circle"></i> Review Your Information</h2>
+                    <p>Please review all your information before submitting.</p>
+                    
+                    <div class="summary-card">
+                        <h3>Verification Details</h3>
+                        <div class="summary-item">
+                            <div class="summary-label">ID Number</div>
+                            <div id="summary-id"></div>
+                        </div>
+                        <div class="summary-item">
+                            <div class="summary-label">Full Name</div>
+                            <div id="summary-name"></div>
+                        </div>
+                        <div class="summary-item">
+                            <div class="summary-label">Voting Station</div>
+                            <div id="summary-station"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="summary-card">
+                        <h3>Demographics</h3>
+                        <div class="summary-item">
+                            <div class="summary-label">Gender & Marital Status</div>
+                            <div id="summary-demographics"></div>
+                        </div>
+                        <div class="summary-item">
+                            <div class="summary-label">Household Size & Housing</div>
+                            <div id="summary-household"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="summary-card">
+                        <h3>Contact Information</h3>
+                        <div class="summary-item">
+                            <div class="summary-label">Phone Number</div>
+                            <div id="summary-phone"></div>
+                        </div>
+                        <div class="summary-item">
+                            <div class="summary-label">Preferred Communication</div>
+                            <div id="summary-communication"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="summary-card">
+                        <h3>Personal Priorities</h3>
+                        <div class="summary-item">
+                            <div class="summary-label">Main Priority</div>
+                            <div id="summary-priority"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="checkbox-option">
+                            <input type="checkbox" id="consentCheck">
+                            I confirm that the information provided is accurate and consent to its use for improving service delivery.
+                        </label>
+                    </div>
+                    
+                    <button class="btn btn-gold" id="submitBtn" disabled>Submit Information</button>
+                </div>
+            </div>
+            
+            <!-- Confirmation Screen -->
+            <div class="step-content" id="confirmation">
+                <div class="card" style="text-align: center;">
+                    <div style="font-size: 4rem; color: var(--anc-green);">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <h2>Thank You!</h2>
+                    <p>Your voter profile has been successfully submitted.</p>
+                    <p>Your information will help us better understand community needs and improve service delivery.</p>
+                    
+                    <div style="margin: 30px 0;">
+                        <button class="btn" id="downloadProfile">
+                            <i class="fas fa-download"></i> Download Profile
+                        </button>
+                    </div>
+                    
+                    <button class="btn btn-secondary" id="newEntry">
+                        <i class="fas fa-plus"></i> Start New Entry
+                    </button>
+                </div>
             </div>
         </div>
+        
+        <div class="notification" id="notification">
+            <i class="fas fa-check-circle"></i> <span id="notificationText"></span>
+        </div>
+        
+        <footer>
+            <p>ConnectVote &copy; 2025 | Voter Data Capture System</p>
+            <p>This information is collected for improving service delivery and community engagement</p>
+        </footer>
     </div>
-    
-    <div class="notification" id="notification">
-        <i class="fas fa-check-circle"></i> <span id="notificationText"></span>
-    </div>
-    
-    <footer>
-        <p>ConnectVote &copy; 2025 | Voter Data Capture System</p>
-        <p>This information is collected for improving service delivery and community engagement</p>
-    </footer>
 
     <script>
+        // Supabase Configuration
+        const SUPABASE_URL = 'https://raqrshclodratvkxlluh.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJhcXJzaGNsb2RyYXR2a3hsbHVoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA5OTA1NzYsImV4cCI6MjA3NjU2NjU3Nn0.7tscAxt_szEiJhAqfR29u4C9GXsklIUUcvBfPgzNhqs';
+        
+        // Initialize Supabase
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        
         // Current step tracking
         let currentStep = 1;
         const totalSteps = 9;
@@ -896,10 +1051,23 @@
         const stepContents = document.querySelectorAll('.step-content');
         const offlineWarning = document.getElementById('offlineWarning');
         const connectionStatus = document.getElementById('connectionStatus');
+        const loginScreen = document.getElementById('loginScreen');
+        const mainApp = document.getElementById('mainApp');
+        const userEmail = document.getElementById('userEmail');
+        const userAvatar = document.getElementById('userAvatar');
+        const voterNotFoundError = document.getElementById('voterNotFoundError');
         
         // Initialize the app
-        function initApp() {
-            updateProgress();
+        async function initApp() {
+            // Check if user is already logged in
+            const { data: { session }, error } = await supabase.auth.getSession();
+            
+            if (session) {
+                showMainApp(session.user);
+            } else {
+                showLoginScreen();
+            }
+            
             setupEventListeners();
             checkOnlineStatus();
             
@@ -912,6 +1080,34 @@
             window.addEventListener('offline', () => {
                 checkOnlineStatus();
             });
+            
+            // Listen for auth state changes
+            supabase.auth.onAuthStateChange((event, session) => {
+                if (event === 'SIGNED_IN' && session) {
+                    showMainApp(session.user);
+                } else if (event === 'SIGNED_OUT') {
+                    showLoginScreen();
+                }
+            });
+        }
+        
+        // Show login screen
+        function showLoginScreen() {
+            loginScreen.style.display = 'block';
+            mainApp.style.display = 'none';
+        }
+        
+        // Show main application
+        function showMainApp(user) {
+            loginScreen.style.display = 'none';
+            mainApp.style.display = 'block';
+            
+            // Update user info
+            userEmail.textContent = user.email;
+            userAvatar.textContent = user.email.charAt(0).toUpperCase();
+            
+            // Initialize app components
+            updateProgress();
         }
         
         // Check online status and update UI
@@ -926,12 +1122,18 @@
         }
         
         // Show notification
-        function showNotification(message) {
+        function showNotification(message, isError = false) {
             const notification = document.getElementById('notification');
             const notificationText = document.getElementById('notificationText');
             
             notificationText.textContent = message;
             notification.style.display = 'block';
+            
+            if (isError) {
+                notification.classList.add('error');
+            } else {
+                notification.classList.remove('error');
+            }
             
             setTimeout(() => {
                 notification.style.display = 'none';
@@ -973,8 +1175,61 @@
             }
         }
         
+        // Phone number validation function
+        function validatePhoneNumber(phone) {
+            // Remove all non-digit characters
+            const cleaned = phone.replace(/\D/g, '');
+            
+            // South African phone numbers should be 10 digits starting with 0
+            if (cleaned.length === 10 && cleaned.startsWith('0')) {
+                return {
+                    isValid: true,
+                    formatted: cleaned.replace(/(\d{3})(\d{3})(\d{4})/, '$1 $2 $3')
+                };
+            }
+            
+            return {
+                isValid: false,
+                formatted: null
+            };
+        }
+        
         // Setup event listeners
         function setupEventListeners() {
+            // Login button
+            document.getElementById('loginBtn').addEventListener('click', async () => {
+                const email = document.getElementById('email').value;
+                const password = document.getElementById('password').value;
+                const loginError = document.getElementById('loginError');
+                
+                if (!email || !password) {
+                    loginError.textContent = 'Please enter both email and password';
+                    loginError.style.display = 'block';
+                    return;
+                }
+                
+                const loginBtn = document.getElementById('loginBtn');
+                loginBtn.disabled = true;
+                loginBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Signing In...';
+                
+                const { data, error } = await supabase.auth.signInWithPassword({
+                    email: email,
+                    password: password
+                });
+                
+                if (error) {
+                    loginError.textContent = error.message;
+                    loginError.style.display = 'block';
+                    loginBtn.disabled = false;
+                    loginBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Sign In';
+                }
+            });
+            
+            // Logout button
+            document.getElementById('logoutBtn').addEventListener('click', async () => {
+                await supabase.auth.signOut();
+            });
+            
             // Navigation buttons
             document.getElementById('toStep2').addEventListener('click', () => goToStep(2));
             document.getElementById('toStep1').addEventListener('click', () => goToStep(1));
@@ -1016,10 +1271,37 @@
                 });
             });
             
-            // Verify ID button - UPDATED FOR BOT INTEGRATION
+            // Phone validation for Step 8 to Step 9 navigation
+            document.getElementById('toStep9').addEventListener('click', function() {
+                const phoneInput = document.getElementById('phoneNumber');
+                const phoneValue = phoneInput.value.trim();
+                
+                // If phone number is provided, validate it
+                if (phoneValue) {
+                    const validation = validatePhoneNumber(phoneValue);
+                    
+                    if (!validation.isValid) {
+                        showNotification('Please enter a valid South African phone number (10 digits starting with 0)', true);
+                        phoneInput.focus();
+                        return; // Prevent navigation
+                    }
+                    
+                    // Store the formatted version
+                    phoneInput.dataset.formatted = validation.formatted;
+                }
+                
+                // If validation passes or no phone provided, continue to next step
+                goToStep(9);
+            });
+            
+            // Verify ID button - UPDATED TO REMOVE SIMULATED DATA
             document.getElementById('verifyBtn').addEventListener('click', async () => {
                 const idNumber = document.getElementById('idNumber').value;
                 if (idNumber.length === 13 && !isNaN(idNumber)) {
+                    // Hide any previous error messages
+                    voterNotFoundError.style.display = 'none';
+                    document.getElementById('verificationResults').style.display = 'none';
+                    
                     // Show loading state
                     const verifyBtn = document.getElementById('verifyBtn');
                     verifyBtn.disabled = true;
@@ -1046,25 +1328,25 @@
                             document.getElementById('votingDistrict').value = data.votingDistrict;
                             document.getElementById('votingStation').value = data.votingStation;
                             
-                            showNotification('ID successfully verified with IEC - Real Data');
+                            showNotification('ID successfully verified with IEC');
                         } else {
-                            showNotification('Verification failed: ' + (data.error || 'Unknown error'));
-                            // Fallback to simulated data
-                            fallbackToSimulatedData(idNumber);
+                            // Show voter not found message
+                            voterNotFoundError.style.display = 'block';
+                            showNotification('Voter not found on IEC database', true);
                         }
                         
                     } catch (error) {
                         console.error('Verification error:', error);
-                        showNotification('Connection error. Using simulated data.');
-                        // Fallback to simulated data
-                        fallbackToSimulatedData(idNumber);
+                        // Show connection error with voter not found message
+                        voterNotFoundError.style.display = 'block';
+                        showNotification('Connection error. Voter not found on IEC database.', true);
                     } finally {
                         // Reset button state
                         verifyBtn.disabled = false;
                         verifyBtn.textContent = 'Verify with IEC';
                     }
                 } else {
-                    showNotification('Please enter a valid 13-digit ID number');
+                    showNotification('Please enter a valid 13-digit ID number', true);
                 }
             });
             
@@ -1073,13 +1355,26 @@
                 document.getElementById('submitBtn').disabled = !this.checked;
             });
             
-            // Submit button
-            document.getElementById('submitBtn').addEventListener('click', () => {
-                // Show confirmation screen
-                goToStep(11); // Confirmation is step 11
+            // Submit button - UPDATED FOR SUPABASE
+            document.getElementById('submitBtn').addEventListener('click', async () => {
+                const submitBtn = document.getElementById('submitBtn');
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
                 
-                // Save data (in a real app, this would sync with a server)
-                saveDataLocally();
+                try {
+                    await saveDataToSupabase();
+                    
+                    // Show confirmation screen
+                    goToStep(11); // Confirmation is step 11
+                    showNotification('Voter profile submitted successfully!');
+                    
+                } catch (error) {
+                    console.error('Error saving data:', error);
+                    showNotification('Error submitting data. Please try again.', true);
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = 'Submit Information';
+                }
             });
             
             // Download profile button
@@ -1101,7 +1396,6 @@
                     }
                 });
                 // Reset first radio buttons
-                document.querySelector('input[name="changeStation"]').checked = true;
                 document.querySelector('input[name="hasMatric"][value="no"]').checked = true;
                 document.querySelector('input[name="hasTraining"][value="no"]').checked = true;
                 document.querySelector('input[name="isEmployed"][value="no"]').checked = true;
@@ -1116,51 +1410,89 @@
                 document.getElementById('trainingTypeGroup').style.display = 'none';
                 document.getElementById('employmentDetails').style.display = 'none';
                 document.getElementById('verificationResults').style.display = 'none';
+                voterNotFoundError.style.display = 'none';
                 
                 updateProgress();
             });
         }
         
-        // Fallback function for simulated data
-        function fallbackToSimulatedData(idNumber) {
-            document.getElementById('verificationResults').style.display = 'block';
-            document.getElementById('fullName').value = 'Simulated Voter Name';
-            document.getElementById('age').value = 'Based on ID: ' + (2025 - parseInt(idNumber.substring(0, 2)) > 1900 ? 
-                2025 - (1900 + parseInt(idNumber.substring(0, 2))) : 
-                2025 - (2000 + parseInt(idNumber.substring(0, 2))));
-            document.getElementById('ward').value = 'Ward ' + (parseInt(idNumber.substring(7, 8)) + 1);
-            document.getElementById('votingDistrict').value = 'District ' + (parseInt(idNumber.substring(9, 10)) + 1);
-            document.getElementById('votingStation').value = 'Station ' + (parseInt(idNumber.substring(10, 12)) + 1);
-        }
-        
-        // Save data locally (simulated)
-        function saveDataLocally() {
-            const formData = {
-                idNumber: document.getElementById('idNumber').value,
-                fullName: document.getElementById('fullName').value,
-                timestamp: new Date().toISOString()
+        // Save data to Supabase
+        async function saveDataToSupabase() {
+            const { data: { user } } = await supabase.auth.getUser();
+            
+            if (!user) {
+                throw new Error('User not authenticated');
+            }
+            
+            const voterData = {
+                // Verification
+                id_number: document.getElementById('idNumber').value,
+                full_name: document.getElementById('fullName').value,
+                age: document.getElementById('age').value,
+                ward: document.getElementById('ward').value,
+                voting_district: document.getElementById('votingDistrict').value,
+                voting_station: document.getElementById('votingStation').value,
+                
+                // Demographics
+                gender: document.querySelector('input[name="gender"]:checked')?.value,
+                marital_status: document.getElementById('maritalStatus').value,
+                household_size: document.getElementById('householdSize').value,
+                housing_type: document.getElementById('housingType').value,
+                
+                // Education
+                has_matric: document.querySelector('input[name="hasMatric"]:checked')?.value,
+                education_level: document.getElementById('educationLevel').value,
+                has_training: document.querySelector('input[name="hasTraining"]:checked')?.value,
+                training_type: document.getElementById('trainingType').value,
+                
+                // Employment
+                is_employed: document.querySelector('input[name="isEmployed"]:checked')?.value,
+                employment_type: document.getElementById('employmentType').value,
+                occupation: document.getElementById('occupation').value,
+                looking_for_work: document.querySelector('input[name="lookingForWork"]:checked')?.value,
+                work_experience: document.getElementById('workExperience').value,
+                
+                // Social
+                social_grant: document.getElementById('socialGrant').value,
+                children_under_18: document.getElementById('childrenUnder18').value,
+                children_over_18: document.getElementById('childrenOver18').value,
+                elderly_dependents: document.querySelector('input[name="elderlyDependents"]:checked')?.value,
+                
+                // Community
+                community_challenge: document.getElementById('communityChallenge').value,
+                problem_description: document.getElementById('problemDescription').value,
+                
+                // Political
+                voted_last_election: document.querySelector('input[name="votedLastElection"]:checked')?.value,
+                need_help: document.querySelector('input[name="needHelp"]:checked')?.value,
+                volunteer: document.querySelector('input[name="volunteer"]:checked')?.value,
+                
+                // Communication
+                phone_number: document.getElementById('phoneNumber').value,
+                use_whatsapp: document.querySelector('input[name="useWhatsapp"]:checked')?.value,
+                has_internet: document.querySelector('input[name="hasInternet"]:checked')?.value,
+                communication_method: document.getElementById('communicationMethod').value,
+                
+                // Aspirations
+                priority: document.getElementById('priority').value,
+                notifications: document.querySelector('input[name="notifications"]:checked')?.value,
+                
+                // Metadata
+                collected_by: user.id,
+                collected_at: new Date().toISOString(),
+                status: 'completed'
             };
             
-            // In a real app, this would use IndexedDB or similar
-            localStorage.setItem('voterData', JSON.stringify(formData));
-            console.log('Data saved locally:', formData);
+            // Insert into Supabase
+            const { data, error } = await supabase
+                .from('voter_profiles')
+                .insert([voterData]);
             
-            // If online, try to sync with server
-            if (navigator.onLine) {
-                syncWithServer(formData);
-            } else {
-                // Store for later sync
-                const pendingSync = JSON.parse(localStorage.getItem('pendingSync') || '[]');
-                pendingSync.push(formData);
-                localStorage.setItem('pendingSync', JSON.stringify(pendingSync));
+            if (error) {
+                throw error;
             }
-        }
-        
-        // Sync with server (simulated)
-        function syncWithServer(data) {
-            console.log('Syncing data with server:', data);
-            // In a real app, this would be a fetch request to your API
-            showNotification('Data synced with server');
+            
+            return data;
         }
         
         // Update summary with entered data
@@ -1178,6 +1510,14 @@
             const housingType = document.getElementById('housingType').value;
             document.getElementById('summary-household').textContent = 
                 `${householdSize} people, ${housingType || 'Not specified'}`;
+            
+            const phoneNumber = document.getElementById('phoneNumber').dataset.formatted || 
+                               document.getElementById('phoneNumber').value || 
+                               'Not provided';
+            document.getElementById('summary-phone').textContent = phoneNumber;
+            
+            const communicationMethod = document.getElementById('communicationMethod').value;
+            document.getElementById('summary-communication').textContent = communicationMethod || 'Not specified';
             
             const priority = document.getElementById('priority').value;
             document.getElementById('summary-priority').textContent = priority || 'Not specified';
